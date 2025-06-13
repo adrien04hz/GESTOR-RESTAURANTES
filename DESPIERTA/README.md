@@ -9,13 +9,13 @@ Nos ayuda para no estar levantando servicios uno por uno, entonces lo unico que 
 1. Cambiar el modo a ejecutable del archivo, solo se ejecuta la primera vez que se vaya a utilizar:
 
     ```bash
-    $ chmod +x levantad.sh 
+    chmod +x levantad.sh 
     ```
 
 2. Levantar los servicios ejecutando el archivito con:
 
     ```bash
-    $ source levantad.sh
+    source levantad.sh
     ```
 
 con eso se deberia de ver algunas shells levantandose.
