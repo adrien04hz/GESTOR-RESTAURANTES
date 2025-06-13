@@ -1,0 +1,4 @@
+/BD-mongo/.env
+/BD-mongo/mongodata
+/ENDPOINTS/venv/
+/ENDPOINTS/__pycache__/
