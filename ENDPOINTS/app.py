@@ -80,21 +80,5 @@ async def listar(sucursal: int):
         }
 
 
-'''
-MONGO_URL="mongodb+srv://adrienahs:4dr13nM0N0G0@gestorrestaurantes.t3vx5ir.mongodb.net/?retryWrites=true&w=majority&appName=GestorRestaurantes"
-'''
 
-
-'''
-mongodb+srv://<db_username>:<db_password>@gestorrestaurantes.t3vx5ir.mongodb.net/?retryWrites=true&w=majority&appName=GestorRestaurantes
-'''
-
-'''
-mongoimport --uri "mongodb+srv://adrienahs:4dr13nM0N0G0@gestorrestaurantes.t3vx5ir.mongodb.net/?retryWrites=true&w=majority&appName=GestorRestaurantes" \
-            --collection "Productos" \
-            --file "/home/adrien_hs/Documentos/4_WEB_UTM/Gestor-restaurantes/ENDPOINTS/SCRAP/ShakeShack.json" \
-            --jsonArray 
-
-
-'''
 
