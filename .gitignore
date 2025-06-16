@@ -2,3 +2,6 @@
 /BD-mongo/mongodata
 /ENDPOINTS/venv/
 /ENDPOINTS/__pycache__/
+/ENDPOINTS/.env
+/ENDPOINTS/modelos.py
+/ENDPOINTS/SCRAP
