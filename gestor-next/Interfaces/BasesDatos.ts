@@ -86,6 +86,7 @@ interface PayPalCliente{
 }
 
 
+// el menu de cada sucursal
 interface Productos{
     id : number;
     id_sucursal: number;
@@ -96,8 +97,18 @@ interface Productos{
 }
 
 
+// carritos de los clientes
 interface Carrito{
+    id : number;
+    id_cliente: number;
+    id_sucursal: number;
+}
+
+
+interface DetalleCarrito{
+    id_carrito: number;
     id_producto: number;
+    cantidad: number;
 }
 
 
@@ -105,12 +116,15 @@ interface PedidosCliente{
     id : number;
     id_cliente: number;
     id_estado: number;
+    id_sucursal: number;
     monto_total: number;
+    fecha: string;
 }
 
 interface ProductoPedido{
     id_pedido: number;
     id_producto: number;
+    cantidad: number;
 }
 
 
@@ -153,6 +167,3 @@ interface HorariosAdmin{
     fin: string;
     id_depto: number;
 }
-
-
-
