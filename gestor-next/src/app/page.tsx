@@ -1,16 +1,30 @@
 "use client";
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
+interface UserData {
+  id: number;
+  nombre: string;
+  apellido: string;
+  email: string;
+  id_rol: number;
+  rol_nombre: string;
+  id_sucursal?: number; // Para gerentes/empleados
+  nombre_sucursal?: string; // Para gerentes/empleados
+}
+
 export default function LoginPage() {
+  const router = useRouter();
   const [formData, setFormData] = useState({
-    username: '',
+    email: '', // Cambiado de username a email para coincidir con tu interfaz
     password: ''
   });
 
   const [errors, setErrors] = useState({
-    username: '',
-    password: ''
+    email: '',
+    password: '',
+    login: '' // Error general de autenticación
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -23,30 +37,59 @@ export default function LoginPage() {
     }));
     // Limpiar error al escribir
     if (errors[name as keyof typeof errors]) {
-      setErrors(prev => ({ ...prev, [name]: '' }));
+      setErrors(prev => ({ ...prev, [name]: '', login: '' }));
     }
   };
 
   const validateForm = () => {
     const newErrors = {
-      username: formData.username ? '' : 'Usuario es requerido',
-      password: formData.password.length >= 6 ? '' : 'Mínimo 6 caracteres'
+      email: formData.email.includes('@') ? '' : 'Email inválido',
+      password: formData.password.length >= 6 ? '' : 'Mínimo 6 caracteres',
+      login: ''
     };
     setErrors(newErrors);
     return !Object.values(newErrors).some(error => error !== '');
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (validateForm()) {
-      setIsSubmitting(true);
-      // Simulamos un retraso de red (2 segundos)
-      setTimeout(() => {
-        console.log('Datos simulados para enviar:', formData);
-        setIsSubmitting(false);
-        // Aquí iría la redirección en producción:
-        // router.push('/dashboard');
-      }, 2000);
+    if (!validateForm()) return;
+
+    setIsSubmitting(true);
+    setErrors(prev => ({ ...prev, login: '' }));
+
+    try {
+      const response = await fetch('http://tu-backend.com/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      });
+
+      if (!response.ok) {
+        throw new Error('Credenciales incorrectas');
+      }
+
+      const userData: UserData = await response.json();
+
+      // Almacenar datos de usuario en sessionStorage
+      sessionStorage.setItem('userData', JSON.stringify(userData));
+
+      // Redirigir según el rol
+      if (userData.id_rol === 1) { // Suponiendo que 1 es gerente
+        router.push('/pagina-gerente');
+      } else if (userData.id_rol === 2) { // Suponiendo que 2 es empleado
+        router.push('/empleado'); // Cambia a la ruta correcta para empleados
+      } else { // Cliente u otros roles
+        router.push('/menu');
+      }
+
+    } catch (error) {
+      setErrors(prev => ({
+        ...prev,
+        login: error instanceof Error ? error.message : 'Error al iniciar sesión'
+      }));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -67,24 +110,30 @@ export default function LoginPage() {
                 Inicia Sesión
               </h2>
 
+              {errors.login && (
+                <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg">
+                  {errors.login}
+                </div>
+              )}
+
               <form onSubmit={handleSubmit} className="w-full">
                 <div className="flex flex-col w-full my-5">
-                  <label htmlFor="username" className="text-gray-500 mb-2">
-                    Usuario
+                  <label htmlFor="email" className="text-gray-500 mb-2">
+                    Email
                   </label>
                   <input
-                    type="text"
-                    id="username"
-                    name="username"
-                    value={formData.username}
+                    type="email"
+                    id="email"
+                    name="email"
+                    value={formData.email}
                     onChange={handleChange}
-                    placeholder="Ingresa tu usuario"
+                    placeholder="Ingresa tu email"
                     className={`appearance-none border-2 rounded-lg px-4 py-3 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-green-600 focus:shadow-lg ${
-                      errors.username ? 'border-red-500' : 'border-gray-100'
+                      errors.email ? 'border-red-500' : 'border-gray-100'
                     }`}
                   />
-                  {errors.username && (
-                    <p className="text-red-500 text-sm mt-1">{errors.username}</p>
+                  {errors.email && (
+                    <p className="text-red-500 text-sm mt-1">{errors.email}</p>
                   )}
                 </div>
 
