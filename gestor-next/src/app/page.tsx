@@ -131,7 +131,7 @@ export default function LoginPage() {
 
                   <div className="flex justify-center mt-5">
                     <Link 
-                      href="/registro" 
+                      href="/Home/registro-cliente" 
                       className="text-center font-medium text-gray-500 hover:text-green-600 transition-colors"
                     >
                       ¿No tienes cuenta? Regístrate

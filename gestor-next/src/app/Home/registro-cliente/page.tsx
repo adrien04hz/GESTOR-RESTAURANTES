@@ -75,7 +75,7 @@ export default function Registro() {
         throw new Error(errorData.message || 'Error en el registro');
       }
       
-      router.push('/login');
+      router.push('../../');
     } catch (error) {
       setErrors({ submit: error instanceof Error ? error.message : 'Error al registrar' });
     } finally {
@@ -210,7 +210,7 @@ export default function Registro() {
 
             <div className="text-center mt-6 text-gray-600">
               ¿Ya tienes cuenta?{' '}
-              <Link href="/login" className="text-green-600 hover:underline font-medium">
+              <Link href="../.." className="text-green-600 hover:underline font-medium">
                 Inicia sesión
               </Link>
             </div>
