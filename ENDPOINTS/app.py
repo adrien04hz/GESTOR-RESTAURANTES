@@ -78,3 +78,7 @@ async def listar(sucursal: int):
             "success": False,
             "message": "No se encontraron productos para la sucursal especificada."
         }
+
+
+
+
