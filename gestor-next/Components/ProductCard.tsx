@@ -2,11 +2,25 @@
 import Image from 'next/image';
 import { useState, useEffect } from 'react';
 import { Productos } from '../Interfaces/BasesDatos'; // Asegúrate de que la ruta sea correcta
+import { motion } from 'framer-motion';
 
 export const ProductCard = ({ producto }: { producto: Productos }) => {
 
     const [cantidad, setCantidad] = useState(0);
 
+    const addToCart = async () => {
+        await fetch('http://127.0.0.1:8000/addToCart', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                id_carrito: producto.id_sucursal,
+                id_producto: producto.id,
+                id_sucursal: producto.id_sucursal,
+            }),
+        });
+    }
 
     return (
     <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-shadow">
@@ -28,7 +42,7 @@ export const ProductCard = ({ producto }: { producto: Productos }) => {
             </span>
         </div>
         
-        <p className="text-gray-600 mt-2 text-sm">{producto.descripcion}</p>
+        <p className="text-gray-600 mt-2 text-sm">{producto.decripcion}</p>
         
         <div className="mt-4 flex justify-between items-center">
             {/* <div className="flex items-center space-x-2">
@@ -46,10 +60,10 @@ export const ProductCard = ({ producto }: { producto: Productos }) => {
                 +
             </button>
             </div> */}
-            
-            <button className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors">
+
+            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => addToCart()} className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors">
             Añadir al carrito
-            </button>
+            </motion.button>
         </div>
         </div>
     </div>

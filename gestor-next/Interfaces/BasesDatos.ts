@@ -91,7 +91,7 @@ export interface Productos{
     id : number;
     id_sucursal: number;
     nombre: string;
-    descripcion: string;
+    decripcion: string;
     precio: number;
     imagen: string;
 }
