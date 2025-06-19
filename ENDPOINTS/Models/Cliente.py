@@ -2,6 +2,14 @@ from Models.Usuario import Usuario
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional
 
+class LoginRequest(BaseModel):
+    email: EmailStr
+    contrasena: str
+    
+class LoginResponse(BaseModel):
+    nombre: str
+    apellido: str
+
 class ClienteCreate(BaseModel):
     id: int
     nombre: str

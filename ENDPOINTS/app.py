@@ -1,13 +1,21 @@
 # main.py
-from fastapi import FastAPI, HTTPException, status, Request
+from fastapi import FastAPI, HTTPException, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordBearer
+from fastapi.responses import JSONResponse
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
-import bcrypt
 import os
-import traceback
-from Models.Cliente import ClienteCreate, ClienteResponse
+from Models.Cliente import ClienteCreate, ClienteResponse, LoginRequest, LoginResponse
 from Models.Cliente import Cliente as DomainCliente
+from Models.Token import TokenResponse
+
+from utils.auth import (
+    hash_password,
+    verify_password,
+    create_access_token,
+    decode_token,
+)
 
 load_dotenv()
 
@@ -60,8 +68,19 @@ TarjetasCredito = db["TarjetasCredito"]
 TarjetasDebito = db["TarjetasDebito"]
 # ======================================================
 
-def hash_password(passw:str):
-        return bcrypt.hashpw(passw.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    payload = decode_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Token inválido o expirado")
+    email: str | None = payload.get("sub")
+    if not email:
+        raise HTTPException(status_code=401, detail="Token inválido")
+    user = await Clientes.find_one({"email": email})
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    return user
 
 @app.get("/")
 async def root():
@@ -87,50 +106,46 @@ async def listar(sucursal: int):
         }
 
 
-@app.get('/details-client/{client}')
-async def get_client(client: int):
-    cliente = Clientes.find({'id':client}, {'_id':0, 'password':0})
-    if cliente:
-        datos_cliente = [cli async for cli in cliente]
-        return {
-            "success": True,
-            "count": 1,
-            "data": datos_cliente
-        }
-    else:
-        return {
-            "success": False,
-            "message": "No se encontro al cliente"
-        }
+@app.get("/mis-datos")
+async def mis_datos(current_user=Depends(get_current_user)):
+    cliente = await Clientes.find_one(
+        {"email": current_user["email"]},
+        {"_id": 0, "id": 0}
+    )
+
+    if not cliente:
+        return JSONResponse(
+            status_code=404,
+            content={"success": False, "message": "No se encontró al cliente"},
+        )
+    cliente['contrasena'] = "********"
+    return {
+        "success": True,
+        "data": cliente
+    }
         
-@app.post('/create-client', response_model=ClienteResponse, status_code=status.HTTP_201_CREATED)
+@app.post("/create-client", response_model=TokenResponse, status_code=201)
 async def create_client(cliente: ClienteCreate):
-    correo_existe = await Clientes.find_one(
-        {"email": cliente.email},
-        {"_id": 0},
-    )
-    
-    id_existe = await Clientes.find_one(
-        {'id':cliente.id},
-        {'_id':0},
-    )
-    
-    if correo_existe or id_existe:
+    if await Clientes.find_one({"$or": [{"email": cliente.email}, {"id": cliente.id}]}):
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+            status_code=409,
             detail="El correo o el id ya existe dentro de la base de datos",
         )
 
-    documento = cliente.model_dump()
-    documento["contrasena"] = hash_password(documento["contrasena"])
+    doc = cliente.model_dump()
+    doc["contrasena"] = hash_password(doc["contrasena"])
+    await Clientes.insert_one(doc)
 
-    resultado = await Clientes.insert_one(documento)
+    # token con el email como sujeto
+    token = create_access_token({"sub": cliente.email})
+    return TokenResponse(access_token=token)
+    
 
-    return ClienteResponse(
-        id=str(documento['id']),
-        nombre=documento["nombre"],
-        apellido=documento["apellido"],
-        email=documento["email"],
-        metodosPago=documento.get("metodosPago", []),
-        id_carrito=documento["id_carrito"],
-    )
+@app.post("/login", response_model=TokenResponse, status_code=200)
+async def login(datos: LoginRequest):
+    user = await Clientes.find_one({"email": datos.email})
+    if not user or not verify_password(datos.contrasena, user["contrasena"]):
+        raise HTTPException(status_code=401, detail="Credenciales incorrectas")
+
+    token = create_access_token({"sub": user["email"]})
+    return TokenResponse(access_token=token)
