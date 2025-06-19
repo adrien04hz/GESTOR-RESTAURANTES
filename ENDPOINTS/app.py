@@ -11,6 +11,8 @@ from Models.Cliente import Cliente as DomainCliente
 from Models.Token import TokenResponse
 from Models.MetodosPago import CreditCardRequest, DebitCardRequest, PaypalRequest
 from Models.PedidosProductos import Cart
+from Models.PedidosProductos import PaymentRequest, PayAtBranchRequest
+from datetime import datetime
 
 
 from utils.auth import (
@@ -63,12 +65,13 @@ LogSistemaEmpleados = db["LogSistemaEmpleados"]
 PayPalCliente = db["PayPalCliente"]
 PedidosCliente = db["PedidosCliente"]
 Productos = db["Productos"]
-ProductosPedido = db["ProductosPedido"]
+ProductosPedido = db["ProductosPedidos"]
 Roles = db["Roles"]
 RolesAdmin = db["RolesAdmin"]
 Sucursales = db["Sucursales"]
 TarjetasCredito = db["TarjetasCredito"]
 TarjetasDebito = db["TarjetasDebito"]
+EstadoPedidoPagado = db['EstadoPedidoPagado']
 # ======================================================
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
@@ -171,7 +174,7 @@ async def login(datos: LoginRequest):
     else:
         user = await EmpleadosAdmin.find_one({"email": datos.email})
         if user and verify_password(datos.password, user["password"]):
-            id_rol   = user["id_rol"]
+            id_rol   = user["id_rolAdmin"]
             rol_doc  = await RolesAdmin.find_one({"id": id_rol}, {"_id": 0, "nombre": 1})
             rol_name = rol_doc["nombre"] if rol_doc else "admin"
         
@@ -280,9 +283,9 @@ async def get_payments(current_user=Depends(get_current_user)):
     else:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='No se encontraron metodos de pago')
     
-@app.get('/get-cart-client/{id}')
-async def get_cart(id:int):
-    id_client = id
+@app.get('/get-cart-client')
+async def get_cart(current_user=Depends(get_current_user)):
+    id_client = current_user['id']
     carrito = await Carrito.find_one({'id_cliente':id_client}, {'_id':0})
     if carrito:
         id_sucursal = carrito['id_sucursal']
@@ -301,3 +304,187 @@ async def get_cart(id:int):
     
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='El carrito del cliente no existe')
     
+@app.post("/pay-online")
+async def pay_online(payment_data: PaymentRequest, current_user=Depends(get_current_user)):
+    id_cliente_autenticado = current_user["id"]
+
+    # 1. (Implícito) Cliente inicia pagarPedido() al llamar a este endpoint.
+
+    # 2. Sistema: pedido = consultarPedido()
+    pedido = await PedidosCliente.find_one({
+        "id": payment_data.order_id,
+        "id_cliente": id_cliente_autenticado
+    })
+    if not pedido:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pedido no encontrado o no pertenece a este usuario.")
+
+    #Se obtiene el ID del estado 'Pagado'
+    estado_pagado_doc = await db["stadoPedidoPagado"].find_one({"estado": "Pagado"})
+    if not estado_pagado_doc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Configuración de estado de pago 'Pagado' no encontrada en la base de datos.")
+    id_estado_pagado_exitoso = estado_pagado_doc["id"]
+
+    # Verificar que el pedido no esté ya pagado
+    if pedido.get("id_estado_pagado") == id_estado_pagado_exitoso:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Este pedido ya ha sido pagado.")
+
+    # **Paso crucial 2: Obtener el ID del estado 'En espera'**
+    estado_en_espera_doc = await EstadoPedidoPagado.find_one({"estado": "En espera"})
+    if not estado_en_espera_doc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Configuración de estado de pedido 'En espera' no encontrada en la base de datos.")
+    id_estado_en_espera = estado_en_espera_doc["id"]
+
+
+    # 3. y 4. Simulación de envío a sucursal
+    id_sucursal = pedido.get("id_sucursal")
+    if not id_sucursal:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="El pedido no tiene una sucursal asociada.")
+
+
+    # 5. Consultar método de pago
+    metodo_pago = None
+    if payment_data.payment_method_type == "credit_card":
+        metodo_pago = await TarjetasCredito.find_one({"id": payment_data.payment_method_id, "id_cliente": id_cliente_autenticado})
+    elif payment_data.payment_method_type == "debit_card":
+        metodo_pago = await TarjetasDebito.find_one({"id": payment_data.payment_method_id, "id_cliente": id_cliente_autenticado})
+    elif payment_data.payment_method_type == "paypal":
+        metodo_pago = await PayPalCliente.find_one({"id": payment_data.payment_method_id, "id_cliente": id_cliente_autenticado})
+    else:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tipo de método de pago inválido. Debe ser 'credit_card', 'debit_card' o 'paypal'.")
+
+    if not metodo_pago:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Método de pago no encontrado o no pertenece a este usuario.")
+
+    # 6. Validar consulta (simulación de pasarela de pago)
+    print(f"DEBUG: Procesando pago de {pedido.get('monto_total', 0)} con método {payment_data.payment_method_type} ID: {payment_data.payment_method_id}")
+    pago_exitoso = True # Esto se determinaría por la pasarela de pago real
+
+    if not pago_exitoso:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El procesamiento del pago falló.")
+
+    # 7. Sistema: setEstadoPedidoPago()
+    # Actualiza el estado de pago del pedido y el estado principal del pedido a "En espera"
+    update_fields = {
+        "id_estado_pagado": id_estado_pagado_exitoso, # Marcar como pagado
+        "id_estado": id_estado_en_espera,             # Cambiar el estado del pedido a "En espera"
+        "fecha": datetime.utcnow().isoformat()        # Actualizar la fecha
+    }
+
+    updated_pedido_result = await PedidosCliente.update_one(
+        {"id": payment_data.order_id},
+        {"$set": update_fields}
+    )
+
+    if updated_pedido_result.modified_count == 0:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="No se pudo actualizar el estado del pedido.")
+
+    # 8. Cliente: confirmarPagoLinea()
+    return {
+        "success": True,
+        "message": "Pago procesado y pedido confirmado.",
+        "order_id": payment_data.order_id,
+        "payment_status_id": id_estado_pagado_exitoso,
+        "payment_status_name": estado_pagado_doc["estado"],
+        "order_main_status_id": id_estado_en_espera,
+        "order_main_status_name": estado_en_espera_doc["estado"]
+    }
+    
+@app.post("/pay-at-branch")
+async def pay_at_branch(
+    payment_data: PayAtBranchRequest,
+    current_user=Depends(get_current_user)
+):
+
+    # 1. Verificar que el usuario autenticado sea un Cajero
+    if current_user.get("rol_nombre") != "cajero":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acceso denegado. Solo los cajeros pueden procesar pagos en sucursal."
+        )
+
+    id_cliente_solicitado = payment_data.client_id
+    order_id = payment_data.order_id
+
+    # 2. y 3. Sistema: new() y id_cliente = getID()
+    # Se crea una instancia conceptual de Cliente, y su ID se obtiene de la solicitud.
+
+    # 4. Sistema: nombre_cliente = getNombreCompleto()
+    cliente = await Clientes.find_one({"id": id_cliente_solicitado})
+    if not cliente:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cliente no encontrado.")
+    
+    nombre_completo_cliente = f"{cliente.get('nombre')} {cliente.get('apellido')}"
+
+    # 5. Sistema: monto = getMonto()
+    # 6. BDPedidos: monto = consultarMonto()
+    pedido = await PedidosCliente.find_one({"id": order_id, "id_cliente": id_cliente_solicitado})
+    if not pedido:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pedido no encontrado para este cliente.")
+
+    monto_total_pedido = pedido.get("monto_total")
+    if monto_total_pedido is None:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Monto total del pedido no especificado.")
+
+    # **Obtener el ID del estado 'Pagado' de estadoPedidoPagado**
+    estado_pagado_doc = await db["estadoPedidoPagado"].find_one({"estado": "Pagado"})
+    if not estado_pagado_doc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Configuración de estado de pago 'Pagado' no encontrada en la base de datos.")
+    id_estado_pagado_exitoso = estado_pagado_doc["id"]
+
+    # Verificar que el pedido no esté ya pagado
+    if pedido.get("id_estado_pagado") == id_estado_pagado_exitoso:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Este pedido ya ha sido pagado.")
+
+    # **Obtener el ID del estado 'En espera' de estadoPedido**
+    estado_en_espera_doc = await db["EstadosPedido"].find_one({"estado": "En espera"})
+    if not estado_en_espera_doc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Configuración de estado de pedido 'En espera' no encontrada en la base de datos.")
+    id_estado_en_espera = estado_en_espera_doc["id"]
+
+    # 7. Sistema: telefono = consultarTelefono()
+    # 8. BDClientes: telefono = consultarTelefono()
+    telefono_cliente = cliente.get("telefono")
+    if not telefono_cliente:
+        print(f"Advertencia: Teléfono no encontrado para el cliente {id_cliente_solicitado}")
+
+    # 9. BDPedidos: confirmacion = validarMetodo()
+    pago_validado_por_cajero = True
+
+    if not pago_validado_por_cajero:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El cajero no pudo validar el pago.")
+
+    # 10. BDPedidos: confirmacion = setEstadoPedidoPagado("Pagado")
+    # Actualizar el estado de pago del pedido y el estado principal del pedido a "En espera"
+    update_fields = {
+        "id_estado_pagado": id_estado_pagado_exitoso,  # Marcar como pagado
+        "id_estado": id_estado_en_espera,              # Cambiar el estado del pedido a "En espera"
+        "fecha": datetime.utcnow().isoformat()         # Actualizar la fecha del pedido al momento del pago
+    }
+
+    updated_pedido_result = await PedidosCliente.update_one(
+        {"id": order_id, "id_cliente": id_cliente_solicitado},
+        {"$set": update_fields}
+    )
+
+    if updated_pedido_result.modified_count == 0:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="No se pudo actualizar el estado del pedido a 'pagado'/'en espera'.")
+
+    # 11. Sistema: ticket = generarTicket()
+    ticket_info = {
+        "order_id": order_id,
+        "client_name": nombre_completo_cliente,
+        "total_amount": monto_total_pedido,
+        "payment_type": "Pago en Sucursal",
+        "date": datetime.utcnow().isoformat(),
+        "status_pago": estado_pagado_doc["estado"],
+        "estado_pedido": estado_en_espera_doc["estado"],
+        "cajero_id": current_user["id"],
+        "cajero_nombre": f"{current_user.get('nombre')} {current_user.get('apellido')}"
+    }
+
+    # 12. Cajero: entregarTicket()
+    return {
+        "success": True,
+        "message": "Pago en sucursal procesado exitosamente.",
+        "ticket": ticket_info
+    }

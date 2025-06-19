@@ -5,8 +5,17 @@ class Cart(BaseModel):
     id: int
     id_cliente: int
     id_sucursal: int
+    
+class PaymentRequest(BaseModel):
+    order_id: int
+    payment_method_id: int
+    payment_method_type: str
 
-
+class PayAtBranchRequest(BaseModel):
+    order_id: int
+    client_id: int
+    
+    
 class Producto:
     def __init__(self, nombre, cantidad, id_producto, precio):
         self.nombre_producto = nombre
