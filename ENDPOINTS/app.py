@@ -222,16 +222,19 @@ async def login(datos: LoginRequest):
     else:
         user = await EmpleadosAdmin.find_one({"email": datos.email})
         if user and user.get("password") and verify_password(datos.password, user["password"]):
-            id_rol   = user["id_rol"]
+            id_rol = user['id_rolAdmin']
             rol_doc  = await RolesAdmin.find_one({"id": id_rol}, {"_id": 0, "nombre": 1})
             rol_name = rol_doc["nombre"] if rol_doc else "admin"
-        
+            if rol_name == "Empleado Depto. Recursos Humanos":
+                id_rol = 5
         else:
             user = await Empleados.find_one({"email": datos.email})
             if user and user.get("password") and verify_password(datos.password, user["password"]):
-                id_rol   = user["id_rol"]
+                id_rol = user["id_rol"]
                 rol_doc  = await Roles.find_one({"id": id_rol}, {"_id": 0, "nombre": 1}) # Se usa 'id' para Roles también
                 rol_name = rol_doc["nombre"] if rol_doc else "empleado"
+                if id_rol == 4:
+                    id_rol = 1
             else:
                 raise HTTPException(status_code=401, detail="Credenciales incorrectas")
     
@@ -256,20 +259,23 @@ async def login(datos: LoginRequest):
 async def add_credit_card(card: CreditCardRequest, current_user=Depends(get_current_user)):
     id_cliente = current_user["id"]
 
-    tarjetas = TarjetasCredito.find({'id_cliente': id_cliente})
-    tarjetas = [t async for t in tarjetas]
+    credit_cards = await TarjetasCredito.count_documents({'id_cliente': id_cliente})
+    debit_cards = await TarjetasDebito.count_documents({'id_cliente': id_cliente})
+    paypals = await PayPalCliente.count_documents({'id_cliente': id_cliente})
 
-    if len(tarjetas) >= 3:
+    total_payment_methods = credit_cards + debit_cards + paypals
+
+    if total_payment_methods >= 3:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail='No es posible agregar más métodos para este cliente'
+            detail='Ya tienes el máximo de 3 métodos de pago registrados (crédito, débito o PayPal combinados).'
         )
 
     datos_tarjeta = card.model_dump()
     if datos_tarjeta["id_cliente"] != id_cliente:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="ID de cliente no coincide con el usuario autenticado.")
     
-    datos_tarjeta.pop('id', None) # Quita el 'id' si está presente, ya que el backend lo generará si es necesario
+    datos_tarjeta.pop('id', None)
     
     ultimo = await TarjetasCredito.find_one(sort=[("id", -1)]) # Obtener el último ID
     next_id = 1 if not ultimo else ultimo["id"] + 1
@@ -284,20 +290,23 @@ async def add_credit_card(card: CreditCardRequest, current_user=Depends(get_curr
 async def add_debit_card(card: DebitCardRequest, current_user=Depends(get_current_user)):
     id_cliente = current_user["id"]
 
-    tarjetas = TarjetasDebito.find({'id_cliente': id_cliente})
-    tarjetas = [t async for t in tarjetas]
+    credit_cards = await TarjetasCredito.count_documents({'id_cliente': id_cliente})
+    debit_cards = await TarjetasDebito.count_documents({'id_cliente': id_cliente})
+    paypals = await PayPalCliente.count_documents({'id_cliente': id_cliente})
 
-    if len(tarjetas) >= 3:
+    total_payment_methods = credit_cards + debit_cards + paypals
+
+    if total_payment_methods >= 3:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail='No es posible agregar más métodos para este cliente'
+            detail='Ya tienes el máximo de 3 métodos de pago registrados (crédito, débito o PayPal combinados).'
         )
 
     datos_tarjeta = card.model_dump()
     if datos_tarjeta["id_cliente"] != id_cliente:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="ID de cliente no coincide con el usuario autenticado.")
 
-    datos_tarjeta.pop('id', None) # Quita el 'id' si está presente
+    datos_tarjeta.pop('id', None)
     ultimo = await TarjetasDebito.find_one(sort=[("id", -1)])
     next_id = 1 if not ultimo else ultimo["id"] + 1
     datos_tarjeta["id"] = next_id
@@ -309,18 +318,25 @@ async def add_debit_card(card: DebitCardRequest, current_user=Depends(get_curren
 @app.post('/add-paypal')
 async def add_paypal(paypal_data: PaypalRequest, current_user=Depends(get_current_user)):
     id_cliente = current_user['id']
-    paypal = PayPalCliente.find({'id_cliente':id_cliente})
-    paypal = [p async for p in paypal]
-    if len(paypal) >= 3:
+    
+    # Inicia la validación del límite total de métodos de pago
+    credit_cards = await TarjetasCredito.count_documents({'id_cliente': id_cliente})
+    debit_cards = await TarjetasDebito.count_documents({'id_cliente': id_cliente})
+    paypals = await PayPalCliente.count_documents({'id_cliente': id_cliente})
+
+    total_payment_methods = credit_cards + debit_cards + paypals
+
+    if total_payment_methods >= 3:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail='No es posible agregar más métodos para este cliente'
+            detail='Ya tienes el máximo de 3 métodos de pago registrados (crédito, débito o PayPal combinados).'
         )
+
     datos_paypal = paypal_data.model_dump()
     if datos_paypal["id_cliente"] != id_cliente:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="ID de cliente no coincide con el usuario autenticado.")
 
-    datos_paypal.pop('id', None) # Quita el 'id' si está presente
+    datos_paypal.pop('id', None)
     ultimo = await PayPalCliente.find_one(sort=[("id", -1)])
     next_id = 1 if not ultimo else ultimo["id"] + 1
     datos_paypal["id"] = next_id
@@ -328,6 +344,7 @@ async def add_paypal(paypal_data: PaypalRequest, current_user=Depends(get_curren
     datos_paypal['password'] = hash_password(datos_paypal['password'])
     await PayPalCliente.insert_one(datos_paypal)
     return {'success': True, 'message': 'Referencia de Paypal agregada'}
+
 
 @app.get('/get-payment-methods')
 async def get_payments(current_user=Depends(get_current_user)):

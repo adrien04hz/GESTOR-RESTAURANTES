@@ -3,25 +3,42 @@
 import type React from "react"
 
 import { useState } from "react"
-import { useParams, useRouter } from "next/navigation"
+// Para la navegación usaremos window.history y window.location
+
 import { CreditCard, Mail, Plus, ArrowLeft, Loader2, Shield, Lock } from "lucide-react"
 
 type MetodoPago = "tarjeta" | "debito" | "paypal" | "otros"
 
 export default function Page() {
-  const params = useParams()
-  const router = useRouter()
-  const clienteId = params.id as string
+  // Obtenemos el clienteId del almacenamiento local, que debería haberse guardado en el login
+  const getClientIdFromStorage = () => {
+    if (typeof window !== 'undefined') {
+      const userDataString = sessionStorage.getItem('userData');
+      if (userDataString) {
+        try {
+          const userData = JSON.parse(userDataString);
+          return userData.id.toString(); // Asumiendo que el ID del cliente es un número
+        } catch (e) {
+          console.error("Error parsing user data from session storage", e);
+        }
+      }
+    }
+    return ""; // Valor por defecto si no se encuentra
+  };
+
+  const clienteId = getClientIdFromStorage();
 
   // Estados del formulario
   const [tipoMetodo, setTipoMetodo] = useState<MetodoPago>("tarjeta")
   const [datosTarjeta, setDatosTarjeta] = useState({
-    numero: "",
-    nombre: "",
-    expiracion: "",
+    numero_tarjeta: "", // Coincide con el modelo FastAPI
+    titular: "",      // Coincide con el modelo FastAPI
+    fecha_vencimiento: "", // Coincide con el modelo FastAPI (MM/YY)
     cvv: "",
+    linea_credito: 0, // Para CreditCardRequest
   })
   const [emailPayPal, setEmailPayPal] = useState("")
+  const [passwordPayPal, setPasswordPayPal] = useState("") // Necesario para PaypalRequest
   const [otrosMetodo, setOtrosMetodo] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
@@ -31,48 +48,103 @@ export default function Page() {
     setIsLoading(true)
     setError("")
 
+    // Validación básica de clienteId
+    if (!clienteId) {
+      setError("ID de cliente no encontrado. Por favor, inicia sesión de nuevo.");
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      let datos: any = { clienteId, tipo: tipoMetodo }
+      let endpoint = "";
+      // El id_cliente debe ser un número entero para FastAPI
+      let payload: any = { id_cliente: parseInt(clienteId) }; 
 
-      if (tipoMetodo === "tarjeta" || tipoMetodo === "debito") {
-        if (datosTarjeta.numero.replace(/\D/g, "").length < 13) {
-          throw new Error("Número de tarjeta inválido")
+      if (tipoMetodo === "tarjeta") {
+        endpoint = "add-credit-card";
+        if (datosTarjeta.numero_tarjeta.replace(/\D/g, "").length < 13) {
+          throw new Error("Número de tarjeta de crédito inválido");
+        }
+        if (datosTarjeta.cvv.replace(/\D/g, "").length < 3) {
+          throw new Error("CVV de tarjeta de crédito inválido");
+        }
+        if (!/^\d{2}\/\d{2}$/.test(datosTarjeta.fecha_vencimiento)) {
+          throw new Error("Formato de fecha de vencimiento (MM/AA) incorrecto.");
+        }
+        
+        payload = {
+          ...payload,
+          titular: datosTarjeta.titular,
+          numero_tarjeta: datosTarjeta.numero_tarjeta.replace(/\D/g, ""), // Limpiar antes de enviar
+          fecha_vencimiento: datosTarjeta.fecha_vencimiento,
+          cvv: datosTarjeta.cvv.replace(/\D/g, ""), // Limpiar antes de enviar
+          linea_credito: datosTarjeta.linea_credito, // Incluir linea_credito
+        };
+      } else if (tipoMetodo === "debito") {
+        endpoint = "add-debit-card";
+        if (datosTarjeta.numero_tarjeta.replace(/\D/g, "").length < 13) {
+          throw new Error("Número de tarjeta de débito inválido");
+        }
+        if (datosTarjeta.cvv.replace(/\D/g, "").length < 3) {
+          throw new Error("CVV de tarjeta de débito inválido");
+        }
+        if (!/^\d{2}\/\d{2}$/.test(datosTarjeta.fecha_vencimiento)) {
+          throw new Error("Formato de fecha de vencimiento (MM/AA) incorrecto.");
         }
 
-        datos = {
-          ...datos,
-          ...datosTarjeta,
-          numero: datosTarjeta.numero.replace(/\D/g, ""),
-        }
+        payload = {
+          ...payload,
+          titular: datosTarjeta.titular,
+          numero_tarjeta: datosTarjeta.numero_tarjeta.replace(/\D/g, ""),
+          fecha_vencimiento: datosTarjeta.fecha_vencimiento,
+          cvv: datosTarjeta.cvv.replace(/\D/g, ""),
+        };
       } else if (tipoMetodo === "paypal") {
-        if (!emailPayPal.includes("@")) {
-          throw new Error("Email de PayPal inválido")
+        endpoint = "add-paypal";
+        if (!emailPayPal.includes("@") || passwordPayPal.length < 6) { // Validar email y contraseña
+          throw new Error("Email de PayPal o contraseña inválidos");
         }
-        datos.email = emailPayPal
+        payload = {
+          ...payload,
+          email: emailPayPal,
+          password: passwordPayPal,
+        };
       } else {
-        if (otrosMetodo.trim().length < 3) {
-          throw new Error("Descripción muy corta")
-        }
-        datos.detalle = otrosMetodo
+        throw new Error("Tipo de método de pago 'Otros' no soportado por la API.");
       }
 
-      const response = await fetch("/api/metodos-pago", {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No hay token de autenticación. Por favor, inicia sesión.');
+      }
+
+      const response = await fetch(`http://localhost:8000/${endpoint}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(datos),
-      })
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify(payload),
+      });
 
       if (!response.ok) {
-        throw new Error("Error al registrar método")
+        const errorData = await response.json();
+        // Mejor manejo del error 422 de FastAPI
+        if (response.status === 422 && errorData.detail) {
+          // Si el error es de validación de Pydantic, muestra los detalles
+          const validationErrors = errorData.detail.map((err: any) => `${err.loc.join('.')} ${err.msg}`).join('; ');
+          throw new Error(`Error de validación: ${validationErrors}`);
+        }
+        throw new Error(errorData.detail || "Error al registrar método de pago.");
       }
 
-      router.push(`/perfil/${clienteId}/metodos-pago?success=true`)
+      //window.location.href = `/Home/perfil-cliente`;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error desconocido")
+      setError(err instanceof Error ? err.message : "Error desconocido");
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const formatNumeroTarjeta = (value: string) => {
     return value
@@ -95,7 +167,7 @@ export default function Page() {
         {/* Header */}
         <div className="mb-8">
           <button
-            onClick={() => router.back()}
+            onClick={() => window.history.back()} // Usar window.history.back()
             className="flex items-center gap-2 text-slate-600 hover:text-slate-800 transition-colors mb-4"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -106,7 +178,8 @@ export default function Page() {
               <CreditCard className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-3xl font-bold text-slate-800 mb-2">Agregar Método de Pago</h1>
-            <p className="text-slate-600">Cliente #{clienteId} • Información segura y encriptada</p>
+            {/* Mostrar clienteId si está disponible */}
+            <p className="text-slate-600">Cliente #{clienteId || 'N/A'} • Información segura y encriptada</p>
           </div>
         </div>
 
@@ -255,8 +328,8 @@ export default function Page() {
                         <label className="block text-sm font-medium text-slate-700 mb-2">Número de tarjeta</label>
                         <input
                           type="text"
-                          value={formatNumeroTarjeta(datosTarjeta.numero)}
-                          onChange={(e) => setDatosTarjeta({ ...datosTarjeta, numero: e.target.value })}
+                          value={formatNumeroTarjeta(datosTarjeta.numero_tarjeta)}
+                          onChange={(e) => setDatosTarjeta({ ...datosTarjeta, numero_tarjeta: e.target.value })}
                           placeholder="1234 5678 9012 3456"
                           className="w-full p-4 border border-slate-300 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all text-lg font-mono"
                           maxLength={19}
@@ -268,8 +341,8 @@ export default function Page() {
                         <label className="block text-sm font-medium text-slate-700 mb-2">Nombre del titular</label>
                         <input
                           type="text"
-                          value={datosTarjeta.nombre}
-                          onChange={(e) => setDatosTarjeta({ ...datosTarjeta, nombre: e.target.value.toUpperCase() })}
+                          value={datosTarjeta.titular}
+                          onChange={(e) => setDatosTarjeta({ ...datosTarjeta, titular: e.target.value.toUpperCase() })}
                           placeholder="JUAN PÉREZ"
                           className="w-full p-4 border border-slate-300 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all uppercase"
                           required
@@ -281,9 +354,9 @@ export default function Page() {
                           <label className="block text-sm font-medium text-slate-700 mb-2">Fecha de expiración</label>
                           <input
                             type="text"
-                            value={datosTarjeta.expiracion}
+                            value={datosTarjeta.fecha_vencimiento}
                             onChange={(e) =>
-                              setDatosTarjeta({ ...datosTarjeta, expiracion: formatExpiracion(e.target.value) })
+                              setDatosTarjeta({ ...datosTarjeta, fecha_vencimiento: formatExpiracion(e.target.value) })
                             }
                             placeholder="MM/AA"
                             className="w-full p-4 border border-slate-300 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all font-mono"
@@ -306,6 +379,21 @@ export default function Page() {
                           />
                         </div>
                       </div>
+                      {tipoMetodo === "tarjeta" && ( // Solo para tarjetas de crédito
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-2">Línea de Crédito</label>
+                          <input
+                            type="number"
+                            value={datosTarjeta.linea_credito}
+                            onChange={(e) =>
+                              setDatosTarjeta({ ...datosTarjeta, linea_credito: parseFloat(e.target.value) || 0 })
+                            }
+                            placeholder="0"
+                            className="w-full p-4 border border-slate-300 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all text-lg font-mono"
+                            required
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -323,6 +411,17 @@ export default function Page() {
                         value={emailPayPal}
                         onChange={(e) => setEmailPayPal(e.target.value)}
                         placeholder="tu@email.com"
+                        className="w-full p-4 border border-slate-300 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">Contraseña de PayPal</label>
+                      <input
+                        type="password"
+                        value={passwordPayPal}
+                        onChange={(e) => setPasswordPayPal(e.target.value)}
+                        placeholder="Ingresa tu contraseña de PayPal"
                         className="w-full p-4 border border-slate-300 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all"
                         required
                       />
@@ -355,7 +454,7 @@ export default function Page() {
               <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t border-slate-200">
                 <button
                   type="button"
-                  onClick={() => router.back()}
+                  onClick={() => window.history.back()}
                   className="flex-1 px-6 py-4 border-2 border-slate-300 rounded-xl text-slate-700 font-medium hover:bg-slate-50 hover:border-slate-400 transition-all"
                 >
                   Cancelar

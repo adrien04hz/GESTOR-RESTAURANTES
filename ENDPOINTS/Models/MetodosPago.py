@@ -1,7 +1,6 @@
 from pydantic import BaseModel, EmailStr
 
 class CreditCardRequest(BaseModel):
-    id: int
     id_cliente: int
     titular: str
     numero_tarjeta: str
@@ -10,7 +9,6 @@ class CreditCardRequest(BaseModel):
     linea_credito: int
     
 class DebitCardRequest(BaseModel):
-    id: int
     id_cliente: int
     titular: str
     numero_tarjeta: str
@@ -18,7 +16,6 @@ class DebitCardRequest(BaseModel):
     cvv: str
     
 class PaypalRequest(BaseModel):
-    id: int
     id_cliente: int
     email: EmailStr
     password: str
