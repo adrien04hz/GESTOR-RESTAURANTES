@@ -200,15 +200,16 @@ export default function Horarios() {
 }
 */
 
-  'use client';
-import { useState } from 'react';
-import Link from 'next/link';
+'use client';
+import { useState, useEffect } from 'react';
 
 interface Empleado {
   id: number;
   nombre: string;
   apellido: string;
   id_rol: number;
+  email?: string;
+  id_sucursal?: number;
 }
 
 interface Horario {
@@ -217,22 +218,24 @@ interface Horario {
   salida: string;
 }
 
-export default function Horarios() {
-  // Mock data - Eliminar cuando tengas el backend
-  const userData = {
-    id: 1,
-    nombre: "Gerente",
-    apellido: "Demo",
-    id_rol: 1,
-    id_sucursal: 1,
-    nombre_sucursal: "Sucursal Principal"
-  };
+// Define la interfaz para los datos del usuario que se almacenarán
+interface UserData {
+  id: number;
+  nombre: string;
+  apellido: string;
+  id_rol: number;
+  id_sucursal?: number;
+  nombre_sucursal?: string;
+}
 
-  const [empleados] = useState<Empleado[]>([
-    { id: 2, nombre: "Juan", apellido: "Pérez", id_rol: 2 },
-    { id: 3, nombre: "María", apellido: "Gómez", id_rol: 2 },
-    { id: 4, nombre: "Carlos", apellido: "López", id_rol: 2 }
-  ]);
+export default function Horarios() {
+  // Estado para almacenar los datos del usuario.
+  // Inicializamos con null y usamos la interfaz UserData o null.
+  const [userData, setUserData] = useState<UserData | null>(null);
+  
+  const [empleados, setEmpleados] = useState<Empleado[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const [empleadoSeleccionado, setEmpleadoSeleccionado] = useState<number | null>(null);
   const [horarios, setHorarios] = useState<Horario[]>([
@@ -245,6 +248,71 @@ export default function Horarios() {
     { dia: 'Domingo', entrada: '', salida: '' }
   ]);
   const [success, setSuccess] = useState('');
+  const [message, setMessage] = useState('');
+
+  // Primer useEffect: Cargar userData de sessionStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') { // Asegura que el código se ejecute solo en el cliente
+      const storedUserData = sessionStorage.getItem('userData');
+      if (storedUserData) {
+        try {
+          // Parseamos el JSON y lo tipamos como UserData
+          setUserData(JSON.parse(storedUserData) as UserData);
+        } catch (e) {
+          console.error("Error parsing userData from sessionStorage", e);
+          setError('Error al cargar los datos del usuario. Formato incorrecto.');
+        }
+      } else {
+        // Si no hay datos de usuario, podrías redirigir al login o mostrar un error
+        setError('No se encontraron datos de usuario. Por favor, inicia sesión de nuevo.');
+      }
+    }
+  }, []); // Se ejecuta solo una vez al montar el componente
+
+  // Segundo useEffect: Obtener la lista de empleados (depende de que userData esté cargado)
+  useEffect(() => {
+    // Solo intenta cargar empleados si userData ya ha sido cargado y no hay un error previo
+    if (userData && !error) { 
+      const fetchEmployees = async () => {
+        setLoading(true);
+        setError(null);
+        try {
+          const token = localStorage.getItem('token');
+          if (!token) {
+            setError('No hay token de autenticación. Por favor, inicia sesión.');
+            setLoading(false);
+            return;
+          }
+
+          const response = await fetch('http://localhost:8000/get-employees', {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Error al cargar los empleados.');
+          }
+
+          const data = await response.json();
+          setEmpleados(data.data);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Error desconocido al cargar empleados.');
+          console.error("Error al cargar empleados:", err);
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchEmployees();
+    } else if (!userData && !loading) {
+        // Si userData es null y no estamos cargando, significa que no se encontró
+        // y el error ya debería haberse establecido en el primer useEffect.
+        // No hacer nada aquí, el estado de error ya se encargará del renderizado.
+    }
+  }, [userData, error]); // Este efecto se ejecuta cuando userData o error cambian
 
   const handleHorarioChange = (index: number, field: 'entrada' | 'salida', value: string) => {
     const nuevosHorarios = [...horarios];
@@ -254,11 +322,11 @@ export default function Horarios() {
 
   const handleSubmit = () => {
     if (!empleadoSeleccionado) {
-      alert('Por favor selecciona un empleado');
+      setMessage('Por favor selecciona un empleado');
+      setTimeout(() => setMessage(''), 3000);
       return;
     }
     
-    // Simular envío exitoso
     console.log('Horarios a guardar:', {
       id_empleado: empleadoSeleccionado,
       horarios: horarios
@@ -268,19 +336,45 @@ export default function Horarios() {
     setTimeout(() => setSuccess(''), 3000);
   };
 
+  // Muestra un mensaje mientras userData se carga o si no se encuentra
+  if (!userData) { 
+    return (
+      <div className="min-h-screen bg-green-100 p-6 flex justify-center items-center">
+        <p className="text-gray-700 text-lg">Cargando datos de usuario...</p>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-green-100 p-6 flex justify-center items-center">
+        <p className="text-gray-700 text-lg">Cargando empleados...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-red-100 p-6 flex justify-center items-center">
+        <p className="text-red-700 text-lg">Error: {error}</p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-green-100 p-6">
       <div className="max-w-4xl mx-auto bg-white rounded-lg shadow-md p-6">
         <div className="flex justify-between items-center mb-6">
+          {/* Se accede a las propiedades de userData de forma segura */}
           <h1 className="text-2xl font-bold text-gray-800">
-            Asignación de Horarios - {userData.nombre_sucursal}
+            Asignación de Horarios - {userData?.nombre_sucursal || 'Cargando...'}
           </h1>
-          <Link 
-            href="/Home/pagina-gerente" 
+          <a
+            href="/Home/pagina-gerente"
             className="text-blue-600 hover:underline"
           >
             Volver al panel
-          </Link>
+          </a>
         </div>
 
         <div className="mb-6">
@@ -288,6 +382,7 @@ export default function Horarios() {
           <select
             className="text-gray-600 w-full p-2 border border-gray-300 rounded"
             onChange={(e) => setEmpleadoSeleccionado(Number(e.target.value))}
+            value={empleadoSeleccionado || ''}
           >
             <option value="">-- Seleccione un empleado --</option>
             {empleados.map(empleado => (
@@ -297,6 +392,12 @@ export default function Horarios() {
             ))}
           </select>
         </div>
+
+        {message && (
+          <div className="mt-4 p-3 bg-red-100 text-red-700 rounded text-center">
+            {message}
+          </div>
+        )}
 
         <div className="overflow-x-auto mb-6">
           <table className="min-w-full bg-white border">
