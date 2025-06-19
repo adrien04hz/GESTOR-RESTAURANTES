@@ -7,15 +7,63 @@
 #     http://127.0.0.1:8000/pedidosEnLinea
 
 
+# curl -X POST \
+#     -H "Content-Type: application/json" \
+#     -d '{
+#         "id_rol": 4,
+#         "id_sucursal": 1,
+#         "nombre": "Maggita",
+#         "apellido": "Hernandez",
+#         "email": "maggita@example.com",
+#         "contrasena": "1234",
+#         "id_admin": 1
+#     }' \
+#     http://127.0.0.1:8000/altaPersonal
+
+
 curl -X POST \
     -H "Content-Type: application/json" \
     -d '{
-        "id_rol": 4,
+        "id_gerente":1,
+        "id_empleado" : 3,
+        "email_empleado" : "carlos@example.com",
         "id_sucursal": 1,
-        "nombre": "Maggita",
-        "apellido": "Hernandez",
-        "email": "maggita@example.com",
-        "contrasena": "1234",
-        "id_admin": 1
+        "horarios" : [
+            {
+                "dia": "Lunes",
+                "hora_entrada": "09:00",
+                "hora_salida": "15:00"
+            },
+            {
+                "dia": "Martes",
+                "hora_entrada": "08:00",
+                "hora_salida": "16:00"
+            },
+            {
+                "dia": "Miércoles",
+                "hora_entrada": "08:00",
+                "hora_salida": "16:00"
+            },
+            {
+                "dia": "Jueves",
+                "hora_entrada": "08:00",
+                "hora_salida": "16:00"
+            },
+            {
+                "dia": "Viernes",
+                "hora_entrada": "08:00",
+                "hora_salida": "16:00"
+            },
+            {
+                "dia": "Sábado",
+                "hora_entrada": "08:00",
+                "hora_salida": "16:00"
+            },
+            {
+                "dia": "Domingo",
+                "hora_entrada": "08:00",
+                "hora_salida": "16:00"
+            }
+        ]
     }' \
-    http://127.0.0.1:8000/altaPersonal
+    http://127.0.0.1:8000/gestionHorarios

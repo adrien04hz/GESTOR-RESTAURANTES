@@ -13,6 +13,7 @@ from Models.MetodosPago import CreditCardRequest, DebitCardRequest, PaypalReques
 from Models.PedidosProductos import Cart
 from Models.Cliente import *
 from Models.EmpleadosAdmin import *
+from Models.Empleados import *
 
 
 from utils.auth import (
@@ -307,3 +308,44 @@ async def altaPersonal(datos: AltaEmpleadoRequest):
     if not confirmacion:
         raise HTTPException(status_code=400, detail="Error al dar de alta el personal")
     return AltaEmpleadoResponse(mensaje="Personal dado de alta correctamente")
+
+
+# endpoints para caso de uso 3
+# gestion de horarios
+@app.post('/gestionHorarios', response_model=HorarioResponse, status_code=200)
+async def gestionHorarios(datos: HorarioRequest):
+    gerente = Gerente(db)
+
+    # 1 : gestionar horarios
+    confirmacion = await gerente.gestionarHorario(datos)
+
+    if not confirmacion:
+        raise HTTPException(status_code=400, detail="Error al gestionar los horarios, mamaste")
+    
+    # 5 : generar empleado
+    empleado = await Empleado.generarEmpleado(db, datos.email_empleado)
+
+    # 6 : enviar correo al empleado
+    confirmar = empleado.recibirCorreo()
+
+    if not confirmar:
+        raise HTTPException(status_code=500, detail="Error al enviar el correo al empleado")
+    
+    # 8 : registrar log
+    try:
+        last_log = await db["LogSistemaEmpleado"].find_one({}, {"_id": 0}, sort=[("id", DESCENDING)])
+
+        last_id = last_log["id"] if last_log else 0
+
+        nuevo_id = last_id + 1
+        log_entry = {
+            "id": nuevo_id,
+            "id_admin": datos.id_gerente,
+            "accion": f"Gestion de horarios de {empleado.getNombreCompleto()}",
+            "fecha": datetime.now().isoformat().split("T")[0]  # Formato YYYY-MM-DD
+        }
+
+        await db["LogSistemaEmpleado"].insert_one(log_entry)
+        return HorarioResponse(mensaje="Horarios gestionados correctamente")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al registrar el log: {str(e)}")
