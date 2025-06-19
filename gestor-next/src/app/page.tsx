@@ -1,103 +1,197 @@
-import Image from "next/image";
+"use client";
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
-export default function Home() {
+interface UserData {
+  id: number;
+  nombre: string;
+  apellido: string;
+  email: string;
+  id_rol: number;
+  rol_nombre: string;
+  id_sucursal?: number; // Para gerentes/empleados
+  nombre_sucursal?: string; // Para gerentes/empleados
+}
+
+export default function LoginPage() {
+  const router = useRouter();
+  const [formData, setFormData] = useState({
+    email: '', // Cambiado de username a email para coincidir con tu interfaz
+    password: ''
+  });
+
+  const [errors, setErrors] = useState({
+    email: '',
+    password: '',
+    login: '' // Error general de autenticación
+  });
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+    // Limpiar error al escribir
+    if (errors[name as keyof typeof errors]) {
+      setErrors(prev => ({ ...prev, [name]: '', login: '' }));
+    }
+  };
+
+  const validateForm = () => {
+    const newErrors = {
+      email: formData.email.includes('@') ? '' : 'Email inválido',
+      password: formData.password.length >= 6 ? '' : 'Mínimo 6 caracteres',
+      login: ''
+    };
+    setErrors(newErrors);
+    return !Object.values(newErrors).some(error => error !== '');
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validateForm()) return;
+
+    setIsSubmitting(true);
+    setErrors(prev => ({ ...prev, login: '' }));
+
+    try {
+      const response = await fetch('http://tu-backend.com/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      });
+
+      if (!response.ok) {
+        throw new Error('Credenciales incorrectas');
+      }
+
+      const userData: UserData = await response.json();
+
+      // Almacenar datos de usuario en sessionStorage
+      sessionStorage.setItem('userData', JSON.stringify(userData));
+
+      // Redirigir según el rol
+      if (userData.id_rol === 1) { // Suponiendo que 1 es gerente
+        router.push('/pagina-gerente');
+      } else if (userData.id_rol === 2) { // Suponiendo que 2 es empleado
+        router.push('/empleado'); // Cambia a la ruta correcta para empleados
+      } else { // Cliente u otros roles
+        router.push('/menu');
+      }
+
+    } catch (error) {
+      setErrors(prev => ({
+        ...prev,
+        login: error instanceof Error ? error.message : 'Error al iniciar sesión'
+      }));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <div className="antialiased bg-gradient-to-br from-green-200 to-white">
+      <div className="container px-6 mx-auto">
+        <div className="flex flex-col text-center md:text-left md:flex-row h-screen justify-evenly md:items-center">
+          <div className="flex flex-col w-full">
+            <h1 className="text-5xl text-gray-800 font-bold">Iniciar Sesión</h1>
+            <p className="w-5/12 mx-auto md:mx-0 text-gray-500">
+              Entra a nuestro catálogo de productos y disfruta de una experiencia inolvidable.
+            </p>
+          </div>
+          
+          <div className="w-full md:w-full lg:w-9/12 mx-auto md:mx-0">
+            <div className="bg-white p-10 flex flex-col w-full shadow-xl rounded-xl">
+              <h2 className="text-2xl font-bold text-gray-800 text-left mb-5">
+                Inicia Sesión
+              </h2>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+              {errors.login && (
+                <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg">
+                  {errors.login}
+                </div>
+              )}
+
+              <form onSubmit={handleSubmit} className="w-full">
+                <div className="flex flex-col w-full my-5">
+                  <label htmlFor="email" className="text-gray-500 mb-2">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    id="email"
+                    name="email"
+                    value={formData.email}
+                    onChange={handleChange}
+                    placeholder="Ingresa tu email"
+                    className={`appearance-none border-2 rounded-lg px-4 py-3 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-green-600 focus:shadow-lg ${
+                      errors.email ? 'border-red-500' : 'border-gray-100'
+                    }`}
+                  />
+                  {errors.email && (
+                    <p className="text-red-500 text-sm mt-1">{errors.email}</p>
+                  )}
+                </div>
+
+                <div className="flex flex-col w-full my-5">
+                  <label htmlFor="password" className="text-gray-500 mb-2">
+                    Contraseña
+                  </label>
+                  <input
+                    type="password"
+                    id="password"
+                    name="password"
+                    value={formData.password}
+                    onChange={handleChange}
+                    placeholder="Ingresa tu contraseña"
+                    className={`appearance-none border-2 rounded-lg px-4 py-3 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-green-600 focus:shadow-lg ${
+                      errors.password ? 'border-red-500' : 'border-gray-100'
+                    }`}
+                  />
+                  {errors.password && (
+                    <p className="text-red-500 text-sm mt-1">{errors.password}</p>
+                  )}
+                </div>
+
+                <div className="flex flex-col w-full my-5">
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className={`w-full py-4 rounded-lg text-white ${
+                      isSubmitting ? 'bg-gray-400' : 'bg-green-600 hover:bg-green-700'
+                    } transition-colors`}
+                  >
+                    {isSubmitting ? (
+                      <span className="flex items-center justify-center">
+                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Procesando...
+                      </span>
+                    ) : (
+                      'Iniciar Sesión'
+                    )}
+                  </button>
+
+                  <div className="flex justify-center mt-5">
+                    <Link 
+                      href="/Home/registro-cliente" 
+                      className="text-center font-medium text-gray-500 hover:text-green-600 transition-colors"
+                    >
+                      ¿No tienes cuenta? Regístrate
+                    </Link>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      </div>
     </div>
   );
 }
