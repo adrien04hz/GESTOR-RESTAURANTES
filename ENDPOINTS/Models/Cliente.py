@@ -1,4 +1,31 @@
 from Models.Usuario import Usuario
+from pydantic import BaseModel, EmailStr
+from typing import List, Optional
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    contrasena: str
+    
+class LoginResponse(BaseModel):
+    nombre: str
+    apellido: str
+
+class ClienteCreate(BaseModel):
+    id: int
+    nombre: str
+    apellido: str
+    email: EmailStr
+    contrasena: str
+    metodosPago: Optional[List[str]] = []
+    id_carrito: Optional[str] = None
+
+class ClienteResponse(BaseModel):
+    id: str
+    nombre: str
+    apellido: str
+    email: EmailStr
+    metodosPago: List[str]
+    id_carrito: Optional[str] = None
 
 class Cliente(Usuario):
     def __init__(self, nombre, apellido, id_cliente, correo_electronico, contrasena, metodosPago, id_carrito):

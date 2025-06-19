@@ -116,6 +116,7 @@ interface PedidosCliente{
     id : number;
     id_cliente: number;
     id_estado: number;
+    id_estado_pagado: number; // nueva coleccion
     id_sucursal: number;
     monto_total: number;
     fecha: string;
@@ -131,6 +132,20 @@ interface ProductoPedido{
 interface EstadosPedido{
     id: number;
     estado: string;
+}
+
+// nueva coleccion
+interface EstadosPedidoPagado{
+    id: number;
+    estado_pagado: string;
+}
+
+
+
+// nueva coleccion
+interface EstadosPedidoPagado{
+    id: number;
+    estado_pagado: string;
 }
 
 
