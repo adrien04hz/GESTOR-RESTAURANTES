@@ -1,6 +1,6 @@
 'use client';
 import { useState } from "react";
-import { Carrito, Productos } from "../../../Interfaces/BasesDatos";
+import { Carrito, Productos } from "../../../../../Interfaces/BasesDatos"
 import { useRouter } from "next/navigation";
 
 interface Params {

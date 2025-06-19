@@ -5,7 +5,7 @@ interface Roles{
 }
 
 
-interface Empleados{
+export interface Empleados{
     id : number;
     id_rol: number;
     id_sucursal: number;
@@ -87,7 +87,7 @@ interface PayPalCliente{
 
 
 // el menu de cada sucursal
-interface Productos{
+export interface Productos{
     id : number;
     id_sucursal: number;
     nombre: string;
@@ -98,7 +98,7 @@ interface Productos{
 
 
 // carritos de los clientes
-interface Carrito{
+export interface Carrito{
     id : number;
     id_cliente: number;
     id_sucursal: number;
