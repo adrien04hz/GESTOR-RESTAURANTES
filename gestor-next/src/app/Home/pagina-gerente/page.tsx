@@ -4,14 +4,14 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 interface UserData {
-  id: number;
-  nombre: string;
-  apellido: string;
-  email: string;
-  id_rol: number;
-  rol_nombre: string;
-  id_sucursal?: number;
-  nombre_sucursal?: string;
+    id: number;
+    nombre: string;
+    apellido: string;
+    email: string;
+    id_rol: number;
+    rol_nombre: string;
+    id_sucursal?: number;
+    nombre_sucursal?: string;
 }
 
 export default function PaginaGerente() {
@@ -59,7 +59,7 @@ export default function PaginaGerente() {
                     {userData.rol_nombre}
                     {userData.nombre_sucursal && ` - ${userData.nombre_sucursal}`}
                 </div>
-                
+
                 <div className="relative mt-8">
                     <div className="absolute inset-0 flex items-center">
                         <div className="w-full border-t border-gray-300"></div>
@@ -67,19 +67,13 @@ export default function PaginaGerente() {
                 </div>
 
                 <div className="p-6 flex flex-col space-y-4">
-                    <Link 
-                        href="./pagina-gerente/asignar-horarios" 
+                    <Link
+                        href="./pagina-gerente/asignar-horarios"
                         className="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-lg transition-colors duration-300 text-center"
                     >
                         Asignar horarios
                     </Link>
-                    
-                    <Link 
-                        href="./pagina-gerente/ver-empleados" 
-                        className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg transition-colors duration-300 text-center"
-                    >
-                        Ver empleados
-                    </Link>
+
                 </div>
             </div>
         </div>
