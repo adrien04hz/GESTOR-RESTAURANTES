@@ -1,5 +1,5 @@
 //'use client';
-import { Carrito, Productos } from "../Interfaces/BasesDatos";
+import { Carrito, Productos } from "../../../../Interfaces/BasesDatos"; // Asegúrate de que la ruta sea correcta
 import Image from 'next/image';
 
 

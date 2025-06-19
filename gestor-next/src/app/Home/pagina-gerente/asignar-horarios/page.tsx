@@ -200,6 +200,7 @@ export default function Horarios() {
 }
 */
 
+// horarios_page.tsx
 'use client';
 import { useState, useEffect } from 'react';
 

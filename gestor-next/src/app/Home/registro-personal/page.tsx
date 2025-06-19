@@ -3,6 +3,17 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
+export interface Sucursales {
+    success: boolean;
+    data:    Datum[];
+}
+
+export interface Datum {
+    id:     number;
+    nombre: string;
+}
+
+
 interface EmpleadoForm {
     nombre: string;
     apellido: string;
@@ -30,6 +41,12 @@ interface UserData {
     rol_nombre?: string;
 }
 
+
+interface Sucursal{
+    id : number;
+    nombre: string;
+}
+
 export default function RegistroEmpleadoRRHH() {
     const router = useRouter();
     const [userData, setUserData] = useState<UserData | null>(null);
@@ -45,7 +62,7 @@ export default function RegistroEmpleadoRRHH() {
     });
 
     const [roles, setRoles] = useState<Rol[]>([]);
-    const [sucursales, setSucursales] = useState<any[]>([]);
+    const [sucursales, setSucursales] = useState<Sucursal[]>([]);
     const [errors, setErrors] = useState<Partial<EmpleadoForm & { submit: string }>>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
@@ -64,7 +81,7 @@ export default function RegistroEmpleadoRRHH() {
         setUserData(parsedData);
 
         // Solo RRHH puede registrar empleados
-        if (parsedData.rol_nombre !== "Empleado de Recursos Humanos") {
+        if (parsedData.rol_nombre !== "Empleado Depto. Recursos Humanos") {
             router.push('/acceso-denegado');
             return;
         }
@@ -73,7 +90,7 @@ export default function RegistroEmpleadoRRHH() {
         const loadData = async () => {
             try {
                 // Cargar roles (excluyendo RRHH y Admin)
-                const rolesResponse = await fetch('http://tu-backend-fastapi.com/roles');
+                const rolesResponse = await fetch('http://127.0.0.1:8000/roles');
                 if (rolesResponse.ok) {
                     const rolesData = await rolesResponse.json();
                     setRoles(rolesData.filter((rol: Rol) => 
@@ -82,9 +99,11 @@ export default function RegistroEmpleadoRRHH() {
                 }
 
                 // Cargar sucursales
-                const sucursalesResponse = await fetch('http://tu-backend-fastapi.com/sucursales');
+                const sucursalesResponse = await fetch('http://127.0.0.1:8000/sucursales');
                 if (sucursalesResponse.ok) {
-                    setSucursales(await sucursalesResponse.json());
+                    const sucursalesData : Sucursales = await sucursalesResponse.json();
+                    const { data } = sucursalesData;
+                    setSucursales(data);
                 }
             } catch (error) {
                 setErrors(prev => ({ ...prev, submit: 'Error al cargar datos iniciales' }));
