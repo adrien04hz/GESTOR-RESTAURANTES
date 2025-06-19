@@ -11,6 +11,9 @@ from Models.Cliente import Cliente as DomainCliente
 from Models.Token import TokenResponse
 from Models.MetodosPago import CreditCardRequest, DebitCardRequest, PaypalRequest
 from Models.PedidosProductos import Cart
+from Models.Cliente import *
+from Models.EmpleadosAdmin import *
+from Models.Empleados import *
 from Models.PedidosProductos import PaymentRequest, PayAtBranchRequest
 from datetime import datetime
 
@@ -58,6 +61,7 @@ DetallesCarrito = db["DetallesCarrito"]
 Empleados = db["Empleados"]
 EmpleadosAdmin = db["EmpleadosAdmin"]
 EstadosPedido = db["EstadosPedido"]
+EstadosPedidoPagado = db["EstadosPedidoPagado"]
 HorariosAdmin = db["HorariosAdmin"]
 HorariosEmpleados = db["HorariosEmpleados"]
 LogSistemaAdmin = db["LogSistemaAdmin"]
@@ -66,6 +70,7 @@ PayPalCliente = db["PayPalCliente"]
 PedidosCliente = db["PedidosCliente"]
 Productos = db["Productos"]
 ProductosPedido = db["ProductosPedidos"]
+ProductosPedidos = db["ProductosPedidos"]
 Roles = db["Roles"]
 RolesAdmin = db["RolesAdmin"]
 Sucursales = db["Sucursales"]
@@ -87,6 +92,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     return user
+
 
 @app.get("/")
 async def root():
@@ -129,6 +135,7 @@ async def mis_datos(current_user=Depends(get_current_user)):
         "success": True,
         "data": cliente
     }
+   
         
 @app.post("/create-client", response_model=TokenResponse, status_code=201)
 async def create_client(cliente: ClienteCreate):
@@ -201,6 +208,12 @@ async def login(datos: LoginRequest):
     access_token = create_access_token(token_payload)
 
     return TokenResponse(access_token=access_token, user=token_payload)
+    if not user or not verify_password(datos.contrasena, user["password"]):
+        raise HTTPException(status_code=401, detail="Credenciales incorrectas")
+
+    token = create_access_token({"sub": user["email"]})
+    return TokenResponse(access_token=token)
+
 
 @app.post('/add-credit-card')
 async def add_credit_card(card: CreditCardRequest, current_user=Depends(get_current_user)):
@@ -222,7 +235,8 @@ async def add_credit_card(card: CreditCardRequest, current_user=Depends(get_curr
 
     return {"success": True, "message": "Tarjeta de crédito agregada correctamente"}
         
-        
+
+
 @app.post('/add-debit-card')
 async def add_debit_card(card: DebitCardRequest, current_user=Depends(get_current_user)):
     id_cliente = current_user["id"]
@@ -243,6 +257,8 @@ async def add_debit_card(card: DebitCardRequest, current_user=Depends(get_curren
 
     return {"success": True, "message": "Tarjeta de débito agregada correctamente"}
 
+
+
 @app.post('/add-paypal')
 async def add_paypal(paypal_data: PaypalRequest, current_user=Depends(get_current_user)):
     id_cliente = current_user['id']
@@ -258,6 +274,8 @@ async def add_paypal(paypal_data: PaypalRequest, current_user=Depends(get_curren
     datos_paypal['password'] = hash_password(datos_paypal['password'])
     await PayPalCliente.insert_one(datos_paypal)
     return {'success': True, 'message': 'Referencia de Paypal agregada'}
+
+
 
 @app.get('/get-payment-methods')
 async def get_payments(current_user=Depends(get_current_user)):
@@ -286,6 +304,12 @@ async def get_payments(current_user=Depends(get_current_user)):
 @app.get('/get-cart-client')
 async def get_cart(current_user=Depends(get_current_user)):
     id_client = current_user['id']
+
+
+
+@app.get('/get-cart-client/{id}')
+async def get_cart(id:int):
+    id_client = id
     carrito = await Carrito.find_one({'id_cliente':id_client}, {'_id':0})
     if carrito:
         id_sucursal = carrito['id_sucursal']
@@ -488,3 +512,84 @@ async def pay_at_branch(
         "message": "Pago en sucursal procesado exitosamente.",
         "ticket": ticket_info
     }
+
+
+
+# endpoints para caso de uso 1
+# pedidos en linea
+@app.post('/pedidosEnLinea', response_model=PedidoResponse, status_code=200)
+async def pedidosEnLinea( datos : PedidoRequest):
+    
+    # Crear cliente
+    cliente = await Cliente.crear_cliente(db, datos.id_cliente)  
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    
+    # 1 : realizar pedido
+    confirmacion = await cliente.realizarPedidoEnLinea(db, datos.id_sucursal)
+
+
+    if confirmacion:
+        return PedidoResponse(mensaje="Pedido realizado con éxito")
+    else:
+        raise HTTPException(status_code=500, detail="Error al realizar el pedido")
+
+
+
+# endpoints para caso de uso 2
+# alta de personal
+@app.post('/altaPersonal', response_model=AltaEmpleadoResponse, status_code=200)
+async def altaPersonal(datos: AltaEmpleadoRequest):
+
+    # Crear empleado RRHH
+    empleado_rrhh = await EmpleadoDptoRRHH.generarEmpleadoRRHH(db, datos.id_admin)
+    if not empleado_rrhh:
+        raise HTTPException(status_code=404, detail="Empleado no encontrado")
+    
+    # 1 : alta de personal
+    confirmacion = await empleado_rrhh.altaPersonal(db,datos)
+
+    if not confirmacion:
+        raise HTTPException(status_code=400, detail="Error al dar de alta el personal")
+    return AltaEmpleadoResponse(mensaje="Personal dado de alta correctamente")
+
+
+# endpoints para caso de uso 3
+# gestion de horarios
+@app.post('/gestionHorarios', response_model=HorarioResponse, status_code=200)
+async def gestionHorarios(datos: HorarioRequest):
+    gerente = Gerente(db)
+
+    # 1 : gestionar horarios
+    confirmacion = await gerente.gestionarHorario(datos)
+
+    if not confirmacion:
+        raise HTTPException(status_code=400, detail="Error al gestionar los horarios, mamaste")
+    
+    # 5 : generar empleado
+    empleado = await Empleado.generarEmpleado(db, datos.email_empleado)
+
+    # 6 : enviar correo al empleado
+    confirmar = empleado.recibirCorreo()
+
+    if not confirmar:
+        raise HTTPException(status_code=500, detail="Error al enviar el correo al empleado")
+    
+    # 8 : registrar log
+    try:
+        last_log = await db["LogSistemaEmpleado"].find_one({}, {"_id": 0}, sort=[("id", DESCENDING)])
+
+        last_id = last_log["id"] if last_log else 0
+
+        nuevo_id = last_id + 1
+        log_entry = {
+            "id": nuevo_id,
+            "id_admin": datos.id_gerente,
+            "accion": f"Gestion de horarios de {empleado.getNombreCompleto()}",
+            "fecha": datetime.now().isoformat().split("T")[0]  # Formato YYYY-MM-DD
+        }
+
+        await db["LogSistemaEmpleado"].insert_one(log_entry)
+        return HorarioResponse(mensaje="Horarios gestionados correctamente")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al registrar el log: {str(e)}")

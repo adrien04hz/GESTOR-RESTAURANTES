@@ -1,4 +1,25 @@
 from Models.Usuario import Usuario
+from pydantic import BaseModel, EmailStr
+from typing import List, Optional
+
+
+
+class DiasSemana(BaseModel):
+    dia : str
+    hora_entrada: str
+    hora_salida: str
+
+# gestion de horarios request (caso de uso 3)
+class HorarioRequest(BaseModel):
+    id_gerente: int
+    id_empleado: int
+    email_empleado: EmailStr
+    id_sucursal : int
+    horarios : List[DiasSemana]
+
+
+class HorarioResponse(BaseModel):
+    mensaje: str
 
 
 class Empleado(Usuario):
@@ -7,6 +28,28 @@ class Empleado(Usuario):
         self.id_empleado = id_empleado
         self.id_rol = id_rol
         self.id_sucursal = id_sucursal
+
+
+    # generar empleado 
+    @classmethod
+    async def generarEmpleado(cls, db_conn, email):
+        empleado_data = await db_conn["Empleados"].find_one({"email": email}, {"_id": 0})
+        if not empleado_data:
+            return None
+        return cls(
+            nombre=empleado_data["nombre"],
+            apellido=empleado_data["apellido"],
+            id_empleado=empleado_data["id"],
+            id_rol=empleado_data["id_rol"],
+            id_sucursal=empleado_data["id_sucursal"]
+        )
+    
+
+   
+
+    # 6 : enviar correo
+    def recibirCorreo(self):
+        return True
     
     def getIdEmpleado(self):
         return self.id_empleado
@@ -78,9 +121,39 @@ class Repartidor(Rol):
         return f"Entrega confirmada: {pedido}"
     
 
-class Gerente(Rol):
-    def __init__(self, id, descripcion, nombre):
-        super().__init__(id, descripcion, nombre)
+class Gerente:
+    def __init__(self, db_conn):
+        self.db_conn = db_conn
+
+    
+    async def gestionarHorario(self, horario_request: HorarioRequest):
+        # 2: validar si tiene horarios asignados
+        empleado = await self.db_conn["HorariosEmpleados"].find_one({"id_empleado": horario_request.id_empleado}, {"_id": 0})
+        horarios_para_mongo = [h.model_dump() for h in horario_request.horarios]
+        # 3 : registrar horarios
+        try:        
+            if empleado:
+                # 3: actualizar horarios
+                await self.db_conn["HorariosEmpleados"].update_one(
+                {"id_empleado": horario_request.id_empleado}, # Filtro para encontrar el documento
+                {"$set": {
+                    "id_sucursal": horario_request.id_sucursal,
+                    "horarios": horarios_para_mongo
+                }},
+                upsert=True
+                )
+            else:
+                # insertar nuevo horario
+                await self.db_conn["HorariosEmpleados"].insert_one({
+                    "id_empleado": horario_request.id_empleado,
+                    "id_sucursal": horario_request.id_sucursal,
+                    "horarios": horarios_para_mongo 
+                })
+            return True
+        except Exception as e:
+            print(f"Error al gestionar horario: {e}")
+            return False
+
 
     def registrarInventario(self, m):
         # Lógica para registrar inventario
