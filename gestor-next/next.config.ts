@@ -1,8 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+
   /* config options here */
-   images: {
+  images: {
     remotePatterns: [
       {
         protocol: 'https',
@@ -13,6 +14,7 @@ const nextConfig: NextConfig = {
         hostname: "www.w3.org/2000/svg"
       }
     ]
-}
+  }
 }
 module.exports = nextConfig;
+
