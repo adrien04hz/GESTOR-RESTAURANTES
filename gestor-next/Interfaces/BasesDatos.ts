@@ -87,7 +87,7 @@ interface PayPalCliente{
 
 
 // el menu de cada sucursal
-interface Productos{
+ export interface Productos{
     id : number;
     id_sucursal: number;
     nombre: string;
