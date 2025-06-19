@@ -172,13 +172,15 @@ async def login(datos: LoginRequest):
         user = await EmpleadosAdmin.find_one({"email": datos.email})
         if user and verify_password(datos.password, user["password"]):
             id_rol   = user["id_rol"]
-            rol_doc  = await Roles.find_one({"id_rol": id_rol}, {"_id": 0, "nombre": 1})
+            rol_doc  = await RolesAdmin.find_one({"id": id_rol}, {"_id": 0, "nombre": 1})
             rol_name = rol_doc["nombre"] if rol_doc else "admin"
         
         else:
             user = await Empleados.find_one({"email": datos.email})
             if user and verify_password(datos.password, user["password"]):
                 id_rol   = user["id_rol"]
+                if id_rol == 4:
+                    id_rol = 1
                 rol_doc  = await Roles.find_one({"id_rol": id_rol}, {"_id": 0, "nombre": 1})
                 rol_name = rol_doc["nombre"] if rol_doc else "empleado"
             else:
