@@ -64,7 +64,7 @@ export default function Registro() {
       // Eliminamos confirm_password antes de enviar
       const { confirm_password, ...clienteData } = formData;
       
-      const response = await fetch('http://tu-backend-fastapi.com/clientes', {
+      const response = await fetch('http://localhost:8000/create-client', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(clienteData)
@@ -74,7 +74,11 @@ export default function Registro() {
         const errorData = await response.json();
         throw new Error(errorData.message || 'Error en el registro');
       }
-      
+
+      const { access_token, user } = await response.json();
+      localStorage.setItem("token", access_token);
+      sessionStorage.setItem("userData", JSON.stringify(user));
+
       router.push('../../');
     } catch (error) {
       setErrors({ submit: error instanceof Error ? error.message : 'Error al registrar' });

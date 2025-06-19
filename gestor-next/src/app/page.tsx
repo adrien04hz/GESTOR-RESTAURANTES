@@ -54,35 +54,36 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
-
+  
     setIsSubmitting(true);
     setErrors(prev => ({ ...prev, login: '' }));
-
+  
     try {
-      const response = await fetch('http://tu-backend.com/api/login', {
+      const response = await fetch('http://localhost:8000/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
       });
-
+  
       if (!response.ok) {
         throw new Error('Credenciales incorrectas');
       }
-
-      const userData: UserData = await response.json();
-
-      // Almacenar datos de usuario en sessionStorage
+  
+      const data = await response.json();
+      const token = data.access_token;
+      const userData: UserData = data.user;
+  
+      localStorage.setItem('token', token);
       sessionStorage.setItem('userData', JSON.stringify(userData));
-
-      // Redirigir según el rol
-      if (userData.id_rol === 1) { // Suponiendo que 1 es gerente
-        router.push('/pagina-gerente');
-      } else if (userData.id_rol === 2) { // Suponiendo que 2 es empleado
-        router.push('/empleado'); // Cambia a la ruta correcta para empleados
-      } else { // Cliente u otros roles
-        router.push('/menu');
+  
+      if (userData.id_rol === 1) {
+        router.push('/Home/pagina-gerente');
+      } else if (userData.id_rol === 2) {
+        router.push('/Home/empleado');
+      } else {
+        router.push('/Home/menu');
       }
-
+  
     } catch (error) {
       setErrors(prev => ({
         ...prev,
