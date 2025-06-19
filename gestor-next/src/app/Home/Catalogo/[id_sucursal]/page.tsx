@@ -7,7 +7,7 @@ import { ProductCard } from '../../../../../Components/ProductCard';
 interface Producto {
   id: number;
   nombre: string;
-  descripcion: string;
+  decripcion: string;
   precio: number;
   imagen: string;
   id_sucursal: number;
