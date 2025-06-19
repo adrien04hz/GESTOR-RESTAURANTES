@@ -12,6 +12,10 @@ const nextConfig: NextConfig = {
       {
         protocol: "http",
         hostname: "www.w3.org/2000/svg"
+      },
+      {
+        protocol: "https",
+        hostname: "d2luv1saso99wi.cloudfront.net"
       }
     ]
   }

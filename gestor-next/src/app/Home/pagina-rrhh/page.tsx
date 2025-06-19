@@ -31,7 +31,7 @@ export default function PaginaRRHH() {
         const parsedData: UserData = JSON.parse(data);
 
         // Verificar que el usuario sea de RRHH
-        if (parsedData.rol_nombre !== "Empleado de Recursos Humanos") {
+        if (parsedData.rol_nombre !== "Empleado Depto. Recursos Humanos") {
             router.push('/acceso-denegado');
             return;
         }
@@ -84,7 +84,7 @@ export default function PaginaRRHH() {
 
                 <div className="p-6 flex flex-col space-y-4">
                     <Link
-                        href="../registro-personal"
+                        href="/Home/registro-personal"
                         className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-6 rounded-lg transition-colors duration-300 text-center"
                     >
                         Registrar Nuevo Empleado
