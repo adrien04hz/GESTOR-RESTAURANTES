@@ -27,3 +27,7 @@ Los siguientes pasos son:
     ```bash
     uvicorn app:app --reload
     ```
+5. Para poder usar los JWT se instala esto en el entorno virtual:
+   ```basg
+   pip install "python-jose[cryptography]" "passlib[bcrypt]"
+   ```
