@@ -1,63 +1,77 @@
-"use client"
+"use client";
+import { useState } from "react";
+import { CreditCard, Banknote, ArrowRight, ArrowLeft, Smartphone } from "lucide-react";
 
-import type React from "react"
+// Tipos
+export type PaymentData = {
+  clientId: number;
+  method: "cash" | "card" | "transfer" | null;
+  amount: number;
+  taxes: number;
+  total: number;
+  reference: number;  //  = order_id
+};
 
-import { useState } from "react"
-import { CreditCard, Banknote, ArrowRight, ArrowLeft, Smartphone } from "lucide-react"
-
-type PaymentData = {
-  method: "cash" | "card" | "transfer" | null
-  amount: number
-  taxes: number
-  total: number
-  reference: string
-}
-
-interface PaymentMethodProps {
-  initialData: Partial<PaymentData>
-  onNext: (data: Partial<PaymentData>) => void
-  onPrev: () => void
-}
+type PaymentMethodProps = {
+  initialData: Partial<PaymentData>;
+  onNext: (data: Partial<PaymentData>) => void;
+  onPrev: () => void;
+};
 
 export default function PaymentMethod({ initialData, onNext, onPrev }: PaymentMethodProps) {
   const [formData, setFormData] = useState({
-    method: initialData.method || null,
-    amount: initialData.amount || 0,
-    taxes: initialData.taxes || 0,
-    total: initialData.total || 0,
-    reference: initialData.reference || "",
-  })
+    method: initialData.method ?? null,
+    amount: initialData.amount ?? 0,
+    reference: initialData.reference ?? "",
+  });
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const [errors, setErrors] = useState<Record<string, string>>({})
+  // ────────────────────────────────────────────────────────────────────
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
+    const newErrors: Record<string, string> = {};
+    if (!formData.method) newErrors.method = "Selecciona un método de pago";
+    if (formData.amount <= 0) newErrors.amount = "El monto debe ser mayor a 0";
+    if (!initialData.clientId) newErrors.clientId = "Falta ID de cliente";
 
-    const newErrors: Record<string, string> = {}
-
-    if (!formData.method) {
-      newErrors.method = "Selecciona un método de pago"
+    if (Object.keys(newErrors).length) {
+      setErrors(newErrors);
+      return;
     }
 
-    if (formData.amount <= 0) {
-      newErrors.amount = "El monto debe ser mayor a 0"
+    // Calcular IVA y total
+    const taxes = formData.amount * 0.16;
+    const total  = formData.amount + taxes;
+
+    const token = localStorage.getItem("token");
+    if (!token) {
+      alert("No hay sesión activa. Inicia sesión de nuevo.");
+      return;
     }
 
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors)
-      return
+    try {
+      const res = await fetch("http://localhost:8000/pay-at-branch", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          client_id: Number(initialData.clientId),
+          order_id: Number(formData.reference),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Error al procesar pago");
+
+      // Fusionar ticket backend + datos locales
+      onNext({ ...formData, taxes, total, ...data.ticket });
+    } catch (err: any) {
+      alert(err.message || "Fallo de red");
     }
-
-    // Calcular impuestos y total
-    const taxes = formData.amount * 0.16 // 16% IVA
-    const total = formData.amount + taxes
-
-    onNext({
-      ...formData,
-      taxes,
-      total,
-    })
-  }
+  };
 
   const paymentMethods = [
     {
