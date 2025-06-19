@@ -67,7 +67,7 @@ HorariosEmpleados = db["HorariosEmpleados"]
 LogSistemaAdmin = db["LogSistemaAdmin"]
 LogSistemaEmpleados = db["LogSistemaEmpleados"]
 PayPalCliente = db["PayPalCliente"]
-PedidosCliente = db["PedidosCliente"]
+PedidosCliente = db["PedidosClientes"]
 Productos = db["Productos"]
 ProductosPedido = db["ProductosPedidos"]
 ProductosPedidos = db["ProductosPedidos"]
@@ -500,21 +500,27 @@ async def pay_at_branch(
     Sigue el diagrama de secuencia "Pagar en sucursal".
     """
     # 1. Verificar que el usuario autenticado sea un Cajero
-    user_rol_name = current_user.get("rol_nombre")
-    if user_rol_name not in ["cajero"]:
+    
+    if current_user.get("rol_nombre") not in ["cajero", "Cajero", "gerente", "admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Acceso denegado. Solo personal autorizado (cajeros, gerentes, admins) puede procesar pagos en sucursal."
+            detail="Acceso denegado. Solo cajeros, gerentes o administradores pueden cobrar en sucursal."
         )
+    
+    print(f"DEBUG: Datos recibidos en pay_at_branch: {payment_data.model_dump()}")
+    print(f"DEBUG: client_id del request: {payment_data.client_id} (Tipo: {type(payment_data.client_id)})")
+    print(f"DEBUG: order_id del request: {payment_data.order_id} (Tipo: {type(payment_data.order_id)})")
 
-    id_cliente_solicitado = payment_data.client_id
-    order_id = payment_data.order_id
+    # Los IDs se usan directamente como enteros, asumiendo que así están en la DB
+    id_cliente_solicitado = payment_data.client_id 
+    order_id = payment_data.order_id 
+
 
     # 2. y 3. Sistema: new() y id_cliente = getID() (Implícito en la solicitud)
-    # Se crea una instancia conceptual de Cliente, y su ID se obtiene de la solicitud.
+    print(f"DEBUG: Realizando consulta a Clientes con id={id_cliente_solicitado}")
+    cliente = await Clientes.find_one({"id": id_cliente_solicitado}) 
+    print(f"DEBUG: Resultado de la consulta Clientes: {cliente}")
 
-    # 4. Sistema: nombre_cliente = getNombreCompleto()
-    cliente = await Clientes.find_one({"id": id_cliente_solicitado})
     if not cliente:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cliente no encontrado.")
     
@@ -522,7 +528,11 @@ async def pay_at_branch(
 
     # 5. Sistema: monto = getMonto()
     # 6. BDPedidos: monto = consultarMonto()
+    print(f"DEBUG: Realizando consulta a PedidosCliente con id={order_id} y id_cliente={id_cliente_solicitado}")
     pedido = await PedidosCliente.find_one({"id": order_id, "id_cliente": id_cliente_solicitado})
+    
+    print(f"DEBUG: Resultado de la consulta PedidosCliente: {pedido}")
+
     if not pedido:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pedido no encontrado para este cliente.")
 
@@ -530,8 +540,8 @@ async def pay_at_branch(
     if monto_total_pedido is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Monto total del pedido no especificado.")
 
-    # **Obtener el ID del estado 'Pagado' de estadoPedidoPagado**
-    estado_pagado_doc = await db["estadoPedidoPagado"].find_one({"estado": "Pagado"})
+    # Se obtieme el ID del estado 'Pagado'
+    estado_pagado_doc = await db["EstadoPedidoPagado"].find_one({"estado": "Pagado"}) 
     if not estado_pagado_doc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Configuración de estado de pago 'Pagado' no encontrada en la base de datos.")
     id_estado_pagado_exitoso = estado_pagado_doc["id"]
@@ -540,20 +550,19 @@ async def pay_at_branch(
     if pedido.get("id_estado_pagado") == id_estado_pagado_exitoso:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Este pedido ya ha sido pagado.")
 
-    # **Obtener el ID del estado 'En espera' de estadoPedido**
+    # Se obtiene el ID del estado 'En espera'
     estado_en_espera_doc = await db["EstadosPedido"].find_one({"estado": "En espera"})
     if not estado_en_espera_doc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Configuración de estado de pedido 'En espera' no encontrada en la base de datos.")
     id_estado_en_espera = estado_en_espera_doc["id"]
 
     # 7. Sistema: telefono = consultarTelefono()
-    # 8. BDClientes: telefono = consultarTelefono()
     telefono_cliente = cliente.get("telefono")
     if not telefono_cliente:
         print(f"Advertencia: Teléfono no encontrado para el cliente {id_cliente_solicitado}")
 
     # 9. BDPedidos: confirmacion = validarMetodo()
-    pago_validado_por_cajero = True # El cajero confirma la recepción del pago.
+    pago_validado_por_cajero = True 
 
     if not pago_validado_por_cajero:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El cajero no pudo validar el pago.")
@@ -575,7 +584,7 @@ async def pay_at_branch(
 
     # 11. Sistema: ticket = generarTicket()
     ticket_info = {
-        "order_id": order_id,
+        "order_id": order_id, 
         "client_name": nombre_completo_cliente,
         "total_amount": monto_total_pedido,
         "payment_type": "Pago en Sucursal",

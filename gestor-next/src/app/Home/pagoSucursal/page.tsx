@@ -16,9 +16,10 @@ import ClientForm from "../../../../Components/ClientForm"
 import PaymentMethod from "../../../../Components/PaymentMethod"
 import Receipt from "../../../../Components/Receipt"
 
+
 type PaymentData = {
-  clientId: string
-  clientName: string
+  clientId: number
+  clientName: number
   clientMendo: string
   phone: string
   method: "cash" | "card" | "transfer" | null
