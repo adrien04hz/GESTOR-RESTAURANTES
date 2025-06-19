@@ -102,7 +102,7 @@ async def root():
 # endpoint para listar todos los productos de una sucursal
 @app.get("/Productos/{sucursal}")
 async def listar(sucursal: int):
-    cursor = Productos.find({"id_sucursal": sucursal}, {"_id": 0}).sort("id", 1)
+    cursor = Productos.find({"id_sucursal": sucursal}, {"_id": 0}).sort("id", 1).limit(30)
     productos = [doc async for doc in cursor]
 
     if productos:
@@ -593,3 +593,51 @@ async def gestionHorarios(datos: HorarioRequest):
         return HorarioResponse(mensaje="Horarios gestionados correctamente")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al registrar el log: {str(e)}")
+
+
+
+# endpoint para regresar todos los empleados
+@app.get('/empleados')
+async def get_empleados():
+    empleados = await Empleados.find({}, {"_id": 0}).to_list(length=None)
+    if empleados:
+        return {
+            "success": True,
+            "data": empleados
+        }
+    else:
+        return {
+            "success": False,
+            "message": "No se encontraron empleados"
+        }
+
+
+
+# endpoint para retornar todos los roles
+@app.get('/roles')
+async def get_roles():
+    roles = await Roles.find({}, {"_id": 0}).to_list(length=None)
+    if roles:
+        return {
+            "success": True,
+            "data": roles
+        }
+    else:
+        return {
+            "success": False,
+            "message": "No se encontraron roles"
+        }
+# endpoint para retornar las sucursales
+@app.get('/sucursales')
+async def get_sucursales():
+    sucursales = await Sucursales.find({}, {"_id": 0}).to_list(length=None)
+    if sucursales:
+        return {
+            "success": True,
+            "data": sucursales
+        }
+    else:
+        return {
+            "success": False,
+            "message": "No se encontraron sucursales"
+        }
