@@ -1,8 +1,6 @@
 // login_page.tsx (Este es el archivo de login original que el usuario ha proporcionado)
 "use client";
-import router from 'next/router';
 import { useState } from 'react';
-// Eliminado: import { useRouter } from 'next/navigation'; // Ya no se usa useRouter
 
 interface UserData {
   id: number;

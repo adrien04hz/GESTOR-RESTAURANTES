@@ -88,22 +88,43 @@ export default function RegistroEmpleadoRRHH() {
 
         // Cargar datos necesarios
         const loadData = async () => {
+            const token = localStorage.getItem("token");
+            if (!token) {
+                setErrors(prev => ({ ...prev, submit: "No se encontró el token de autenticación." }));
+                return;
+            }
+        
             try {
-                // Cargar roles (excluyendo RRHH y Admin)
-                const rolesResponse = await fetch('http://127.0.0.1:8000/roles');
-                if (rolesResponse.ok) {
-                    const rolesData = await rolesResponse.json();
-                    setRoles(rolesData.filter((rol: Rol) => 
-                        !["Empleado de Recursos Humanos", "Administrador"].includes(rol.nombre)
-                    ));
+                // --- roles ---
+                const rolesResp = await fetch("http://127.0.0.1:8000/roles", {
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`
+                    },
+                });
+                if (rolesResp.ok) {
+                    const { data: rolesData } = await rolesResp.json();
+                    setRoles(
+                        rolesData.filter((rol: Rol) =>
+                            !["Empleado Depto. Recursos Humanos", "Administrador"].includes(rol.nombre)
+                        )
+                    );
+                } else if (rolesResp.status === 403) {
+                    setErrors(prev => ({ ...prev, submit: "Acceso denegado para ver roles." }));
                 }
-
-                // Cargar sucursales
-                const sucursalesResponse = await fetch('http://127.0.0.1:8000/sucursales');
-                if (sucursalesResponse.ok) {
-                    const sucursalesData : Sucursales = await sucursalesResponse.json();
-                    const { data } = sucursalesData;
-                    setSucursales(data);
+        
+                // --- sucursales ---
+                const sucResp = await fetch("http://127.0.0.1:8000/sucursales", {
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`
+                    },
+                });
+                if (sucResp.ok) {
+                    const { data: sucData } = await sucResp.json();
+                    setSucursales(sucData);
+                } else if (sucResp.status === 403) {
+                    setErrors(prev => ({ ...prev, submit: "Acceso denegado para ver sucursales." }));
                 }
             } catch (error) {
                 setErrors(prev => ({ ...prev, submit: 'Error al cargar datos iniciales' }));
@@ -145,24 +166,37 @@ export default function RegistroEmpleadoRRHH() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!validateForm()) return;
-
+    
         setIsSubmitting(true);
-
+        const token = localStorage.getItem("token");
+    
+        if (!token) {
+            setErrors({ submit: "No se encontró el token de autenticación." });
+            setIsSubmitting(false);
+            return;
+        }
+    
         try {
-            const { confirm_password, ...empleadoData } = formData;
-
-            const response = await fetch('http://tu-backend-fastapi.com/empleados', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+            const { confirm_password, id_empleado, ...empleadoData } = formData;
+    
+            // Asegura que los campos id_rol y id_sucursal sean números
+            empleadoData.id_rol = empleadoData.id_rol;
+            empleadoData.id_sucursal = empleadoData.id_sucursal;
+    
+            const response = await fetch("http://127.0.0.1:8000/altaPersonal", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
                 body: JSON.stringify(empleadoData)
             });
-
+    
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.message || 'Error en el registro');
+                throw new Error(errorData.detail || 'Error en el registro');
             }
-
-            // Limpiar formulario y mostrar mensaje de éxito
+    
             setFormData({
                 nombre: '',
                 apellido: '',
@@ -194,7 +228,7 @@ export default function RegistroEmpleadoRRHH() {
                                 Registrar Nuevo Empleado
                             </h1>
                             <Link 
-                                href="/rrhh/empleados" 
+                                href="/Home/pagina-rrhh" 
                                 className="text-blue-600 hover:underline"
                             >
                                 Volver a lista de empleados

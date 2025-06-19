@@ -82,57 +82,37 @@ EstadoPedidoPagado = db['EstadoPedidoPagado']
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
+    # ── 1) Verificar y decodificar JWT ─────────────────────────────────
     payload = decode_token(token)
     if not payload:
         raise HTTPException(status_code=401, detail="Token inválido o expirado")
+    
     email: str | None = payload.get("sub")
     if not email:
-        raise HTTPException(status_code=401, detail="Token inválido")
+        raise HTTPException(status_code=401, detail="Token sin sujeto")
 
-    user = None
-    rol_name = None
-    id_rol = None
-    id_sucursal = None
-
-    # 1. Buscar en Clientes
-    user_doc = await Clientes.find_one({"email": email})
-    if user_doc:
-        user = user_doc
-        id_rol = 0
-        rol_name = "cliente"
-    else:
-        # 2. Buscar en EmpleadosAdmin
-        user_doc = await EmpleadosAdmin.find_one({"email": email})
-        if user_doc:
-            user = user_doc
-            id_rol = user_doc["id_rolAdmin"]
-            rol_doc = await RolesAdmin.find_one({"id": id_rol}, {"_id": 0, "nombre": 1})
-            rol_name = "admin"
-            id_sucursal = user_doc.get("id_sucursal") # Admins pueden tener id_sucursal
-        else:
-            # 3. Buscar en Empleados
-            user_doc = await Empleados.find_one({"email": email})
-            if user_doc:
-                user = user_doc
-                id_rol = user_doc["id_rol"]
-                rol_doc = await Roles.find_one({"id": id_rol}, {"_id": 0, "nombre": 1})
-                rol_name = rol_doc["nombre"] if rol_doc else "empleado"
-                id_sucursal = user_doc.get("id_sucursal") # Empleados tienen id_sucursal
-
+    # ── 2) Buscar el usuario en la BD ──────────────────────────────────
+    user = (
+        await Clientes.find_one({"email": email})
+        or await EmpleadosAdmin.find_one({"email": email})
+        or await Empleados.find_one({"email": email})
+    )
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    
-    user_data_for_token = {
-        "sub": user["email"],
-        "id": user["id"],
-        "nombre": user["nombre"],
-        "apellido": user["apellido"],
-        "id_rol": id_rol,
-        "rol_nombre": rol_name,
-        "id_sucursal": id_sucursal
+
+    # ── 3) Combinar datos firmados con datos de la BD ──────────────────
+    #  El rol y sucursal del token tienen prioridad porque vienen firmados.
+    current_user = {
+        "id":           user["id"],
+        "email":        user["email"],
+        "nombre":       user["nombre"],
+        "apellido":     user["apellido"],
+        "id_rol":       payload.get("id_rol",     user.get("id_rol")),
+        "rol_nombre":   payload.get("rol_nombre", user.get("rol_nombre")),
+        "id_sucursal":  payload.get("id_sucursal", user.get("id_sucursal")),
     }
 
-    return user_data_for_token
+    return current_user
 
 
 @app.get("/")
@@ -222,22 +202,31 @@ async def login(datos: LoginRequest):
     else:
         user = await EmpleadosAdmin.find_one({"email": datos.email})
         if user and user.get("password") and verify_password(datos.password, user["password"]):
-            id_rol   = user["id_rol"]
+            id_rol = user['id_rolAdmin']
             rol_doc  = await RolesAdmin.find_one({"id": id_rol}, {"_id": 0, "nombre": 1})
             rol_name = rol_doc["nombre"] if rol_doc else "admin"
-        
+            if rol_name in ["Empleado Depto. Recursos Humanos"]:
+                id_rol = 3
+                rol_name = "Empleado Depto. Recursos Humanos"
+                
         else:
             user = await Empleados.find_one({"email": datos.email})
             if user and user.get("password") and verify_password(datos.password, user["password"]):
-                id_rol   = user["id_rol"]
+                id_rol = user["id_rol"]
                 rol_doc  = await Roles.find_one({"id": id_rol}, {"_id": 0, "nombre": 1}) # Se usa 'id' para Roles también
                 rol_name = rol_doc["nombre"] if rol_doc else "empleado"
+                if id_rol == 4:
+                    id_rol = 1
+                elif id_rol == 5:
+                    id_rol = 5
+                else:
+                    id_rol = 0
             else:
+                
                 raise HTTPException(status_code=401, detail="Credenciales incorrectas")
     
     if not user:
         raise HTTPException(status_code=401, detail="Credenciales incorrectas")
-
     token_payload = {
         "sub":         user["email"],
         "id":          user["id"],
@@ -256,20 +245,23 @@ async def login(datos: LoginRequest):
 async def add_credit_card(card: CreditCardRequest, current_user=Depends(get_current_user)):
     id_cliente = current_user["id"]
 
-    tarjetas = TarjetasCredito.find({'id_cliente': id_cliente})
-    tarjetas = [t async for t in tarjetas]
+    credit_cards = await TarjetasCredito.count_documents({'id_cliente': id_cliente})
+    debit_cards = await TarjetasDebito.count_documents({'id_cliente': id_cliente})
+    paypals = await PayPalCliente.count_documents({'id_cliente': id_cliente})
 
-    if len(tarjetas) >= 3:
+    total_payment_methods = credit_cards + debit_cards + paypals
+
+    if total_payment_methods >= 3:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail='No es posible agregar más métodos para este cliente'
+            detail='Ya tienes el máximo de 3 métodos de pago registrados (crédito, débito o PayPal combinados).'
         )
 
     datos_tarjeta = card.model_dump()
     if datos_tarjeta["id_cliente"] != id_cliente:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="ID de cliente no coincide con el usuario autenticado.")
     
-    datos_tarjeta.pop('id', None) # Quita el 'id' si está presente, ya que el backend lo generará si es necesario
+    datos_tarjeta.pop('id', None)
     
     ultimo = await TarjetasCredito.find_one(sort=[("id", -1)]) # Obtener el último ID
     next_id = 1 if not ultimo else ultimo["id"] + 1
@@ -284,20 +276,23 @@ async def add_credit_card(card: CreditCardRequest, current_user=Depends(get_curr
 async def add_debit_card(card: DebitCardRequest, current_user=Depends(get_current_user)):
     id_cliente = current_user["id"]
 
-    tarjetas = TarjetasDebito.find({'id_cliente': id_cliente})
-    tarjetas = [t async for t in tarjetas]
+    credit_cards = await TarjetasCredito.count_documents({'id_cliente': id_cliente})
+    debit_cards = await TarjetasDebito.count_documents({'id_cliente': id_cliente})
+    paypals = await PayPalCliente.count_documents({'id_cliente': id_cliente})
 
-    if len(tarjetas) >= 3:
+    total_payment_methods = credit_cards + debit_cards + paypals
+
+    if total_payment_methods >= 3:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail='No es posible agregar más métodos para este cliente'
+            detail='Ya tienes el máximo de 3 métodos de pago registrados (crédito, débito o PayPal combinados).'
         )
 
     datos_tarjeta = card.model_dump()
     if datos_tarjeta["id_cliente"] != id_cliente:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="ID de cliente no coincide con el usuario autenticado.")
 
-    datos_tarjeta.pop('id', None) # Quita el 'id' si está presente
+    datos_tarjeta.pop('id', None)
     ultimo = await TarjetasDebito.find_one(sort=[("id", -1)])
     next_id = 1 if not ultimo else ultimo["id"] + 1
     datos_tarjeta["id"] = next_id
@@ -309,18 +304,25 @@ async def add_debit_card(card: DebitCardRequest, current_user=Depends(get_curren
 @app.post('/add-paypal')
 async def add_paypal(paypal_data: PaypalRequest, current_user=Depends(get_current_user)):
     id_cliente = current_user['id']
-    paypal = PayPalCliente.find({'id_cliente':id_cliente})
-    paypal = [p async for p in paypal]
-    if len(paypal) >= 3:
+    
+    # Inicia la validación del límite total de métodos de pago
+    credit_cards = await TarjetasCredito.count_documents({'id_cliente': id_cliente})
+    debit_cards = await TarjetasDebito.count_documents({'id_cliente': id_cliente})
+    paypals = await PayPalCliente.count_documents({'id_cliente': id_cliente})
+
+    total_payment_methods = credit_cards + debit_cards + paypals
+
+    if total_payment_methods >= 3:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail='No es posible agregar más métodos para este cliente'
+            detail='Ya tienes el máximo de 3 métodos de pago registrados (crédito, débito o PayPal combinados).'
         )
+
     datos_paypal = paypal_data.model_dump()
     if datos_paypal["id_cliente"] != id_cliente:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="ID de cliente no coincide con el usuario autenticado.")
 
-    datos_paypal.pop('id', None) # Quita el 'id' si está presente
+    datos_paypal.pop('id', None)
     ultimo = await PayPalCliente.find_one(sort=[("id", -1)])
     next_id = 1 if not ultimo else ultimo["id"] + 1
     datos_paypal["id"] = next_id
@@ -328,6 +330,7 @@ async def add_paypal(paypal_data: PaypalRequest, current_user=Depends(get_curren
     datos_paypal['password'] = hash_password(datos_paypal['password'])
     await PayPalCliente.insert_one(datos_paypal)
     return {'success': True, 'message': 'Referencia de Paypal agregada'}
+
 
 @app.get('/get-payment-methods')
 async def get_payments(current_user=Depends(get_current_user)):
@@ -648,21 +651,117 @@ async def pedidosEnLinea( datos : PedidoRequest):
 
 
 # endpoints para caso de uso 2
-# alta de personal
-@app.post('/altaPersonal', response_model=AltaEmpleadoResponse, status_code=200)
-async def altaPersonal(datos: AltaEmpleadoRequest):
-
-    # Crear empleado RRHH
-    empleado_rrhh = await EmpleadoDptoRRHH.generarEmpleadoRRHH(db, datos.id_admin)
-    if not empleado_rrhh:
-        raise HTTPException(status_code=404, detail="Empleado no encontrado")
+# alta de persona
+@app.post('/altaPersonal', response_model=AltaEmpleadoResponse, status_code=201)
+async def altaPersonal(datos: AltaEmpleadoRequest, current_user=Depends(get_current_user)):
+    """
+    Endpoint para dar de alta a un nuevo empleado.
+    Requiere que el usuario autenticado sea un 'Empleado Depto. Recursos Humanos'.
+    Registra la acción en el log del sistema para administradores.
+    """
+    user_rol_name = current_user.get("rol_nombre")
+    print(user_rol_name)
+    if user_rol_name != "Empleado Depto. Recursos Humanos":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acceso denegado. Solo el personal de RRHH puede dar de alta empleados."
+        )
     
-    # 1 : alta de personal
-    confirmacion = await empleado_rrhh.altaPersonal(db,datos)
+    id_admin_rrhh = current_user["id"] # El ID del admin de RRHH que está dando de alta
 
-    if not confirmacion:
-        raise HTTPException(status_code=400, detail="Error al dar de alta el personal")
-    return AltaEmpleadoResponse(mensaje="Personal dado de alta correctamente")
+    # Verificar si el email ya existe en Clientes, EmpleadosAdmin o Empleados
+    existing_client = await Clientes.find_one({"email": datos.email})
+    existing_admin = await EmpleadosAdmin.find_one({"email": datos.email})
+    existing_employee = await Empleados.find_one({"email": datos.email})
+
+    if existing_client or existing_admin or existing_employee:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="El email ya está registrado por otro usuario.")
+
+    # Obtener el siguiente ID para el nuevo empleado
+    ultimo_empleado = await Empleados.find_one(sort=[("id", -1)])
+    next_id_empleado = 1 if not ultimo_empleado else ultimo_empleado["id"] + 1
+
+    # Preparar el documento del nuevo empleado
+    # id_empleado en el frontend corresponde a `id` en la BD
+    new_employee_doc = {
+        "id": next_id_empleado,
+        "nombre": datos.nombre,
+        "apellido": datos.apellido,
+        "email": datos.email,
+        "password": hash_password(datos.password), # Hashear la contraseña
+        "id_rol": datos.id_rol,
+        "id_sucursal": datos.id_sucursal
+    }
+
+    # Insertar el nuevo empleado en la colección Empleados
+    result = await Empleados.insert_one(new_employee_doc)
+
+    if result.inserted_id:
+        # **Registrar la acción en el log del sistema para administradores**
+        now = datetime.utcnow()
+        log_entry_data = {
+            "id_admin": id_admin_rrhh,
+            "accion": f"Alta de empleado. ID: {next_id_empleado}, Email: {datos.email}",
+            "fecha": now.strftime("%Y-%m-%d"), # Formato="%Y-%m-%d"
+            "hora": now.strftime("%H:%M:%S")   # Formato="%H:%M:%S"
+        }
+        
+        # Obtener el siguiente ID para la entrada del log
+        ultimo_log = await LogSistemaAdmin.find_one(sort=[("id", -1)])
+        next_id_log = 1 if not ultimo_log else ultimo_log["id"] + 1
+        log_entry_data["id"] = next_id_log
+
+        await LogSistemaAdmin.insert_one(log_entry_data)
+
+        return AltaEmpleadoResponse(mensaje="Personal dado de alta correctamente", id_empleado_creado=next_id_empleado)
+    else:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error al insertar el empleado en la base de datos.")
+
+
+@app.get('/sucursales', response_model=SucursalesListResponse)
+async def get_sucursales(current_user=Depends(get_current_user)): # Añadido Depends para autenticación
+    """
+    Endpoint para obtener la lista de todas las sucursales.
+    Requiere autenticación.
+    """
+    user_rol_name = current_user.get("rol_nombre")
+    if user_rol_name not in ["admin", "gerente", "Empleado Depto. Recursos Humanos"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acceso denegado. Su rol no tiene permisos para ver las sucursales."
+        )
+
+    cursor = Sucursales.find({}, {"_id": 0}).sort("id", 1) # Excluye _id
+    sucursales_list = [doc async for doc in cursor]
+
+    # Devuelve un éxito con datos vacíos si no hay sucursales, no un 404
+    return {
+        "success": True,
+        "data": sucursales_list
+    }
+
+@app.get('/roles', response_model=RolesListResponse)
+async def get_roles(current_user=Depends(get_current_user)): # Añadido Depends para autenticación
+    """
+    Endpoint para obtener la lista de todos los roles (para empleados, no admins).
+    Requiere autenticación.
+    """
+    user_rol_name = current_user.get("rol_nombre")
+    if user_rol_name not in ["admin", "gerente", "Empleado Depto. Recursos Humanos"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acceso denegado. Su rol no tiene permisos para ver los roles."
+        )
+
+    cursor = Roles.find({}, {"_id": 0}).sort("id", 1) # Asumiendo que Roles usa 'id' para ordenar
+    roles_list = [doc async for doc in cursor]
+
+    # Devuelve un éxito con datos vacíos si no hay roles, no un 404
+    return {
+        "success": True,
+        "data": roles_list
+    }
+
 
 
 # endpoints para caso de uso 3
