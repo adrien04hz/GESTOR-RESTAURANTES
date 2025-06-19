@@ -78,10 +78,13 @@ export default function LoginPage() {
   
       if (userData.id_rol === 1) {
         router.push('/Home/pagina-gerente');
-      } else if (userData.id_rol === 2) {
-        router.push('/Home/empleado');
+      } else if (userData.id_rol === 3) {
+        router.push('/Home/pagina-rrhh');
+      }else if(userData.id_rol === 5){
+        router.push('/Home/pagoSucursal');
+
       } else {
-        router.push('/Home/menu');
+        router.push('/Home/Catalogo/' + 1);
       }
   
     } catch (error) {
