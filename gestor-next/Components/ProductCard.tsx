@@ -42,7 +42,7 @@ export const ProductCard = ({ producto }: { producto: Productos }) => {
             </span>
         </div>
         
-        <p className="text-gray-600 mt-2 text-sm">{producto.descripcion}</p>
+        <p className="text-gray-600 mt-2 text-sm">{producto.decripcion}</p>
         
         <div className="mt-4 flex justify-between items-center">
             {/* <div className="flex items-center space-x-2">

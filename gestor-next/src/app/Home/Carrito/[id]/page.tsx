@@ -68,6 +68,32 @@ export default function DetalleProductoCarrito() {
     carrito()
   }, [])
 
+
+  const realizarPedido = async () => {
+    try {
+      const response = await fetch("http://127.0.0.1:8000/pedidosEnLinea", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id_cliente: carrito.id_cliente,
+          id_sucursal: carrito.id_sucursal,
+        }),
+      });
+      const data = await response.json();
+      // Puedes manejar la respuesta aquí, por ejemplo redirigir o mostrar un mensaje
+      if (data.success) {
+        setEstadoPago("Pagado");
+        // router.push("/Home/Carrito"); // Si quieres redirigir
+      } else {
+        setEstadoPago("Error de pago");
+      }
+    } catch (error) {
+      setEstadoPago("Error de pago");
+    }
+  }
+
   return (
     <div className='flex items-center justify-center min-h-screen bg-gradient-to-br from-[#F9F5F3] via-[#F9F5F3] to-[#F9F5F3] px-2'>
       <div className='mx-auto bg-white rounded-3xl shadow-xl overflow-hidden w-[900px] h-[700]'>
@@ -83,16 +109,12 @@ export default function DetalleProductoCarrito() {
             <p className="text-[15px] font-semibold">Estado del pago: <span className="text-blue-600">{estadoPago}</span></p>
           </div> */}
           <button
-            onClick={handlePagar}
+            onClick={realizarPedido}
             disabled={procesando || estadoPago === "Pagado"}
             className={`block w-full px-4 py-3 font-medium tracking-wide text-center capitalize transition-colors duration-300 transform rounded-[14px] focus:outline-none focus:ring focus:ring-teal-300 focus:ring-opacity-80
               ${estadoPago === "Pagado" ? "bg-green-400 cursor-not-allowed" : "bg-[#FFC933] hover:bg-[#FFC933DD]"}`}
           >
-            {procesando
-              ? "Procesando pago..."
-              : estadoPago === "Pagado"
-              ? "Pagado"
-              : "Pagar en línea"}
+            Realizar Pedido
           </button>
           <Link
             href="/Home/Carrito"
