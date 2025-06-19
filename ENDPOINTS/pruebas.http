@@ -69,11 +69,28 @@
 #     http://127.0.0.1:8000/gestionHorarios
 
 
+# curl -X POST \
+#     -H "Content-Type: application/json" \
+#     -d '{
+#         "id_carrito" : 1,
+#         "id_producto" : 22,
+#         "id_sucursal" : 1
+#     }' \
+#     http://127.0.0.1:8000/addToCart
+
+
+
+    # class PaymentRequest(BaseModel):
+    # order_id: int
+    # payment_method_id: int
+    # payment_method_type: str
+
+
 curl -X POST \
     -H "Content-Type: application/json" \
     -d '{
-        "id_carrito" : 1,
-        "id_producto" : 22,
-        "id_sucursal" : 1
+        "order_id" : 17,
+        "payment_method_id" : 1,
+        "payment_method_type": "credit_card"
     }' \
-    http://127.0.0.1:8000/addToCart
+    http://127.0.0.1:8000/pay-online

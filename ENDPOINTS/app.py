@@ -818,3 +818,21 @@ async def removeItem(id: int):
     else:
         raise HTTPException(status_code=404, detail="Producto no encontrado en el carrito")
 
+
+# endpoint para limpiar el carrito
+@app.delete("/clear-cart/{id_carrito}")
+async def clear_cart(id_carrito: int):
+    result = await DetallesCarrito.delete_many({"id_carrito": id_carrito})
+    if result.deleted_count > 0:
+        return {"success": True, "message": "Carrito limpiado correctamente"}
+    else:
+        return {"success": False, "message": "El carrito ya estaba vacío o no existe"}
+    
+
+@app.get("/ultimo-id-pedido")
+async def get_ultimo_id_pedido():
+    ultimo_pedido = await db["PedidosClientes"].find_one(sort=[("id", -1)])
+    if ultimo_pedido and "id" in ultimo_pedido:
+        return {"success": True, "ultimo_id": ultimo_pedido["id"]}
+    else:
+        return {"success": False, "message": "No hay pedidos registrados"}
