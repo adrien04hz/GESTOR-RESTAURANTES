@@ -26,6 +26,28 @@ class Empleado(Usuario):
         self.id_empleado = id_empleado
         self.id_rol = id_rol
         self.id_sucursal = id_sucursal
+
+
+    # generar empleado 
+    @classmethod
+    async def generarEmpleado(cls, db_conn, email):
+        empleado_data = await db_conn["Empleados"].find_one({"email": email}, {"_id": 0})
+        if not empleado_data:
+            return None
+        return cls(
+            nombre=empleado_data["nombre"],
+            apellido=empleado_data["apellido"],
+            id_empleado=empleado_data["id"],
+            id_rol=empleado_data["id_rol"],
+            id_sucursal=empleado_data["id_sucursal"]
+        )
+    
+
+   
+
+    # 6 : enviar correo
+    def recibirCorreo(self):
+        return True
     
     def getIdEmpleado(self):
         return self.id_empleado

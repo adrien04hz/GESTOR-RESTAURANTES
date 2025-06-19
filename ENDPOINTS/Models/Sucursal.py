@@ -80,6 +80,8 @@ class Sucursal:
             print(f"Error al registrar el pedido: {e}")
             return False
 
+
+
     def procesoPagos(self):
         # Lógica para procesar pagos en la sucursal
         return "Pagos procesados en la sucursal."

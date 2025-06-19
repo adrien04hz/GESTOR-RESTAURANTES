@@ -12,6 +12,7 @@ from Models.Token import TokenResponse
 from Models.MetodosPago import CreditCardRequest, DebitCardRequest, PaypalRequest
 from Models.PedidosProductos import Cart
 from Models.Cliente import *
+from Models.EmpleadosAdmin import *
 
 
 from utils.auth import (
@@ -87,6 +88,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     return user
 
+
 @app.get("/")
 async def root():
     return {"message": "Mongo conectado"}
@@ -128,6 +130,7 @@ async def mis_datos(current_user=Depends(get_current_user)):
         "success": True,
         "data": cliente
     }
+   
         
 @app.post("/create-client", response_model=TokenResponse, status_code=201)
 async def create_client(cliente: ClienteCreate):
@@ -155,6 +158,7 @@ async def login(datos: LoginRequest):
     token = create_access_token({"sub": user["email"]})
     return TokenResponse(access_token=token)
 
+
 @app.post('/add-credit-card')
 async def add_credit_card(card: CreditCardRequest, current_user=Depends(get_current_user)):
     id_cliente = current_user["id"]
@@ -175,7 +179,8 @@ async def add_credit_card(card: CreditCardRequest, current_user=Depends(get_curr
 
     return {"success": True, "message": "Tarjeta de crédito agregada correctamente"}
         
-        
+
+
 @app.post('/add-debit-card')
 async def add_debit_card(card: DebitCardRequest, current_user=Depends(get_current_user)):
     id_cliente = current_user["id"]
@@ -196,6 +201,8 @@ async def add_debit_card(card: DebitCardRequest, current_user=Depends(get_curren
 
     return {"success": True, "message": "Tarjeta de débito agregada correctamente"}
 
+
+
 @app.post('/add-paypal')
 async def add_paypal(paypal_data: PaypalRequest, current_user=Depends(get_current_user)):
     id_cliente = current_user['id']
@@ -211,6 +218,8 @@ async def add_paypal(paypal_data: PaypalRequest, current_user=Depends(get_curren
     datos_paypal['password'] = hash_password(datos_paypal['password'])
     await PayPalCliente.insert_one(datos_paypal)
     return {'success': True, 'message': 'Referencia de Paypal agregada'}
+
+
 
 @app.get('/get-payment-methods')
 async def get_payments(current_user=Depends(get_current_user)):
@@ -235,7 +244,9 @@ async def get_payments(current_user=Depends(get_current_user)):
         }
     else:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='No se encontraron metodos de pago')
-    
+
+
+
 @app.get('/get-cart-client/{id}')
 async def get_cart(id:int):
     id_client = id
@@ -279,3 +290,20 @@ async def pedidosEnLinea( datos : PedidoRequest):
         raise HTTPException(status_code=500, detail="Error al realizar el pedido")
 
 
+
+# endpoints para caso de uso 2
+# alta de personal
+@app.post('/altaPersonal', response_model=AltaEmpleadoResponse, status_code=200)
+async def altaPersonal(datos: AltaEmpleadoRequest):
+
+    # Crear empleado RRHH
+    empleado_rrhh = await EmpleadoDptoRRHH.generarEmpleadoRRHH(db, datos.id_admin)
+    if not empleado_rrhh:
+        raise HTTPException(status_code=404, detail="Empleado no encontrado")
+    
+    # 1 : alta de personal
+    confirmacion = await empleado_rrhh.altaPersonal(db,datos)
+
+    if not confirmacion:
+        raise HTTPException(status_code=400, detail="Error al dar de alta el personal")
+    return AltaEmpleadoResponse(mensaje="Personal dado de alta correctamente")

@@ -1,7 +1,21 @@
+# curl -X POST \
+#     -H "Content-Type: application/json" \
+#     -d '{
+#     "id_cliente": 2,
+#     "id_sucursal": 2
+#     }' \
+#     http://127.0.0.1:8000/pedidosEnLinea
+
+
 curl -X POST \
     -H "Content-Type: application/json" \
     -d '{
-    "id_cliente": 1,
-    "id_sucursal": 1
+        "id_rol": 4,
+        "id_sucursal": 1,
+        "nombre": "Maggita",
+        "apellido": "Hernandez",
+        "email": "maggita@example.com",
+        "contrasena": "1234",
+        "id_admin": 1
     }' \
-    http://127.0.0.1:8000/pedidosEnLinea
+    http://127.0.0.1:8000/altaPersonal
