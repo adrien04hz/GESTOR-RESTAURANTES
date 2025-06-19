@@ -129,29 +129,75 @@ async def mis_datos(current_user=Depends(get_current_user)):
         
 @app.post("/create-client", response_model=TokenResponse, status_code=201)
 async def create_client(cliente: ClienteCreate):
-    if await Clientes.find_one({"$or": [{"email": cliente.email}, {"id": cliente.id}]}):
-        raise HTTPException(
-            status_code=409,
-            detail="El correo o el id ya existe dentro de la base de datos",
-        )
+    if await Clientes.find_one({"email": cliente.email}):
+        raise HTTPException(status_code=409, detail="El correo ya existe")
+
+    ultimo = await Clientes.find_one(sort=[("id", -1)])  # el mayor id
+    next_id = 1 if not ultimo else ultimo["id"] + 1
 
     doc = cliente.model_dump()
-    doc["contrasena"] = hash_password(doc["contrasena"])
+    doc["id"] = next_id
+    doc["password"] = hash_password(doc["password"])
     await Clientes.insert_one(doc)
 
-    # token con el email como sujeto
-    token = create_access_token({"sub": cliente.email})
-    return TokenResponse(access_token=token)
+    payload = {
+        "sub": doc["email"],
+        "id": doc["id"],
+        "id_rol": None,
+        "rol_nombre": "cliente",
+        "nombre": doc["nombre"],
+        "apellido": doc["apellido"],
+    }
+    token = create_access_token(payload)
+
+    return TokenResponse(access_token=token, user=payload)
     
 
-@app.post("/login", response_model=TokenResponse, status_code=200)
+@app.post("/login", response_model=TokenResponse)
 async def login(datos: LoginRequest):
+    """
+    Intenta autenticar **en este orden**:
+    1. Cliente         (colección `Clientes`)
+    2. Empleado Admin  (colección `EmpleadosAdmin`)
+    3. Empleado        (colección `Empleados`)
+    Devuelve un JWT + datos resumidos del usuario autenticado.
+    """
+    
     user = await Clientes.find_one({"email": datos.email})
-    if not user or not verify_password(datos.contrasena, user["contrasena"]):
-        raise HTTPException(status_code=401, detail="Credenciales incorrectas")
+    if user and verify_password(datos.password, user["password"]):
+        id_rol   = 0
+        rol_name = "cliente"
+    
+    else:
+        user = await EmpleadosAdmin.find_one({"email": datos.email})
+        if user and verify_password(datos.password, user["password"]):
+            id_rol   = user["id_rol"]
+            rol_doc  = await RolesAdmin.find_one({"id": id_rol}, {"_id": 0, "nombre": 1})
+            rol_name = rol_doc["nombre"] if rol_doc else "admin"
+        
+        else:
+            user = await Empleados.find_one({"email": datos.email})
+            if user and verify_password(datos.password, user["password"]):
+                id_rol   = user["id_rol"]
+                if id_rol == 4:
+                    id_rol = 1
+                rol_doc  = await Roles.find_one({"id_rol": id_rol}, {"_id": 0, "nombre": 1})
+                rol_name = rol_doc["nombre"] if rol_doc else "empleado"
+            else:
+                raise HTTPException(status_code=401, detail="Credenciales incorrectas")
+    
+    token_payload = {
+        "sub":         user["email"],
+        "id":          user["id"],
+        "id_rol":      id_rol,
+        "rol_nombre":  rol_name,
+        "id_sucursal": user.get("id_sucursal"),
+        "nombre":      user["nombre"],
+        "apellido":    user["apellido"],
+    }
+    access_token = create_access_token(token_payload)
 
-    token = create_access_token({"sub": user["email"]})
-    return TokenResponse(access_token=token)
+    return TokenResponse(access_token=access_token, user=token_payload)
 
 @app.post('/add-credit-card')
 async def add_credit_card(card: CreditCardRequest, current_user=Depends(get_current_user)):
