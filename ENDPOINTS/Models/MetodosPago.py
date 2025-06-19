@@ -1,3 +1,29 @@
+from pydantic import BaseModel, EmailStr
+
+class CreditCardRequest(BaseModel):
+    id: int
+    id_cliente: int
+    titular: str
+    numero_tarjeta: str
+    fecha_vencimiento: str
+    cvv: str
+    linea_credito: int
+    
+class DebitCardRequest(BaseModel):
+    id: int
+    id_cliente: int
+    titular: str
+    numero_tarjeta: str
+    fecha_vencimiento: str
+    cvv: str
+    
+class PaypalRequest(BaseModel):
+    id: int
+    id_cliente: int
+    email: EmailStr
+    password: str
+    
+
 class MetodoPago:
     def __init__(self, id_metodo, id_cliente, tipo):
         self.id_metodo = id_metodo

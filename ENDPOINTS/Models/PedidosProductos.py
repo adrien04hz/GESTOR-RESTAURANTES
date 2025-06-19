@@ -1,4 +1,10 @@
 from enum import Enum
+from pydantic import BaseModel
+
+class Cart(BaseModel):
+    id: int
+    id_cliente: int
+    id_sucursal: int
 
 
 class Producto:
