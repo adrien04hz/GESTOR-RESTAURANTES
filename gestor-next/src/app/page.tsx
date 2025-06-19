@@ -77,11 +77,11 @@ export default function LoginPage() {
       sessionStorage.setItem('userData', JSON.stringify(userData));
   
       if (userData.id_rol === 1) {
-        router.push('/pagina-gerente');
+        router.push('/Home/pagina-gerente');
       } else if (userData.id_rol === 2) {
-        router.push('/empleado');
+        router.push('/Home/empleado');
       } else {
-        router.push('/menu');
+        router.push('/Home/menu');
       }
   
     } catch (error) {
