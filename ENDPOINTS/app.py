@@ -88,10 +88,51 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     email: str | None = payload.get("sub")
     if not email:
         raise HTTPException(status_code=401, detail="Token inválido")
-    user = await Clientes.find_one({"email": email})
+
+    user = None
+    rol_name = None
+    id_rol = None
+    id_sucursal = None
+
+    # 1. Buscar en Clientes
+    user_doc = await Clientes.find_one({"email": email})
+    if user_doc:
+        user = user_doc
+        id_rol = 0
+        rol_name = "cliente"
+    else:
+        # 2. Buscar en EmpleadosAdmin
+        user_doc = await EmpleadosAdmin.find_one({"email": email})
+        if user_doc:
+            user = user_doc
+            id_rol = user_doc["id_rolAdmin"]
+            rol_doc = await RolesAdmin.find_one({"id": id_rol}, {"_id": 0, "nombre": 1})
+            rol_name = "admin"
+            id_sucursal = user_doc.get("id_sucursal") # Admins pueden tener id_sucursal
+        else:
+            # 3. Buscar en Empleados
+            user_doc = await Empleados.find_one({"email": email})
+            if user_doc:
+                user = user_doc
+                id_rol = user_doc["id_rol"]
+                rol_doc = await Roles.find_one({"id": id_rol}, {"_id": 0, "nombre": 1})
+                rol_name = rol_doc["nombre"] if rol_doc else "empleado"
+                id_sucursal = user_doc.get("id_sucursal") # Empleados tienen id_sucursal
+
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    return user
+    
+    user_data_for_token = {
+        "sub": user["email"],
+        "id": user["id"],
+        "nombre": user["nombre"],
+        "apellido": user["apellido"],
+        "id_rol": id_rol,
+        "rol_nombre": rol_name,
+        "id_sucursal": id_sucursal
+    }
+
+    return user_data_for_token
 
 
 @app.get("/")
@@ -174,28 +215,29 @@ async def login(datos: LoginRequest):
     """
     
     user = await Clientes.find_one({"email": datos.email})
-    if user and verify_password(datos.password, user["password"]):
+    if user and user.get("password") and verify_password(datos.password, user["password"]):
         id_rol   = 0
         rol_name = "cliente"
     
     else:
         user = await EmpleadosAdmin.find_one({"email": datos.email})
-        if user and verify_password(datos.password, user["password"]):
-            id_rol   = user["id_rolAdmin"]
+        if user and user.get("password") and verify_password(datos.password, user["password"]):
+            id_rol   = user["id_rol"]
             rol_doc  = await RolesAdmin.find_one({"id": id_rol}, {"_id": 0, "nombre": 1})
             rol_name = rol_doc["nombre"] if rol_doc else "admin"
         
         else:
             user = await Empleados.find_one({"email": datos.email})
-            if user and verify_password(datos.password, user["password"]):
+            if user and user.get("password") and verify_password(datos.password, user["password"]):
                 id_rol   = user["id_rol"]
-                if id_rol == 4:
-                    id_rol = 1
-                rol_doc  = await Roles.find_one({"id_rol": id_rol}, {"_id": 0, "nombre": 1})
+                rol_doc  = await Roles.find_one({"id": id_rol}, {"_id": 0, "nombre": 1}) # Se usa 'id' para Roles también
                 rol_name = rol_doc["nombre"] if rol_doc else "empleado"
             else:
                 raise HTTPException(status_code=401, detail="Credenciales incorrectas")
     
+    if not user:
+        raise HTTPException(status_code=401, detail="Credenciales incorrectas")
+
     token_payload = {
         "sub":         user["email"],
         "id":          user["id"],
@@ -208,11 +250,6 @@ async def login(datos: LoginRequest):
     access_token = create_access_token(token_payload)
 
     return TokenResponse(access_token=access_token, user=token_payload)
-    if not user or not verify_password(datos.contrasena, user["password"]):
-        raise HTTPException(status_code=401, detail="Credenciales incorrectas")
-
-    token = create_access_token({"sub": user["email"]})
-    return TokenResponse(access_token=token)
 
 
 @app.post('/add-credit-card')
@@ -229,14 +266,20 @@ async def add_credit_card(card: CreditCardRequest, current_user=Depends(get_curr
         )
 
     datos_tarjeta = card.model_dump()
-    datos_tarjeta["id_cliente"] = id_cliente
+    if datos_tarjeta["id_cliente"] != id_cliente:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="ID de cliente no coincide con el usuario autenticado.")
+    
+    datos_tarjeta.pop('id', None) # Quita el 'id' si está presente, ya que el backend lo generará si es necesario
+    
+    ultimo = await TarjetasCredito.find_one(sort=[("id", -1)]) # Obtener el último ID
+    next_id = 1 if not ultimo else ultimo["id"] + 1
+    datos_tarjeta["id"] = next_id
 
     await TarjetasCredito.insert_one(datos_tarjeta)
 
     return {"success": True, "message": "Tarjeta de crédito agregada correctamente"}
         
-
-
+        
 @app.post('/add-debit-card')
 async def add_debit_card(card: DebitCardRequest, current_user=Depends(get_current_user)):
     id_cliente = current_user["id"]
@@ -251,13 +294,17 @@ async def add_debit_card(card: DebitCardRequest, current_user=Depends(get_curren
         )
 
     datos_tarjeta = card.model_dump()
-    datos_tarjeta["id_cliente"] = id_cliente
+    if datos_tarjeta["id_cliente"] != id_cliente:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="ID de cliente no coincide con el usuario autenticado.")
+
+    datos_tarjeta.pop('id', None) # Quita el 'id' si está presente
+    ultimo = await TarjetasDebito.find_one(sort=[("id", -1)])
+    next_id = 1 if not ultimo else ultimo["id"] + 1
+    datos_tarjeta["id"] = next_id
 
     await TarjetasDebito.insert_one(datos_tarjeta)
 
     return {"success": True, "message": "Tarjeta de débito agregada correctamente"}
-
-
 
 @app.post('/add-paypal')
 async def add_paypal(paypal_data: PaypalRequest, current_user=Depends(get_current_user)):
@@ -270,12 +317,17 @@ async def add_paypal(paypal_data: PaypalRequest, current_user=Depends(get_curren
             detail='No es posible agregar más métodos para este cliente'
         )
     datos_paypal = paypal_data.model_dump()
-    datos_paypal['id_cliente'] = id_cliente
+    if datos_paypal["id_cliente"] != id_cliente:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="ID de cliente no coincide con el usuario autenticado.")
+
+    datos_paypal.pop('id', None) # Quita el 'id' si está presente
+    ultimo = await PayPalCliente.find_one(sort=[("id", -1)])
+    next_id = 1 if not ultimo else ultimo["id"] + 1
+    datos_paypal["id"] = next_id
+
     datos_paypal['password'] = hash_password(datos_paypal['password'])
     await PayPalCliente.insert_one(datos_paypal)
     return {'success': True, 'message': 'Referencia de Paypal agregada'}
-
-
 
 @app.get('/get-payment-methods')
 async def get_payments(current_user=Depends(get_current_user)):
@@ -301,14 +353,8 @@ async def get_payments(current_user=Depends(get_current_user)):
     else:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='No se encontraron metodos de pago')
     
-@app.get('/get-cart-client')
-async def get_cart(current_user=Depends(get_current_user)):
-    id_client = current_user['id']
-
-
-
 @app.get('/get-cart-client/{id}')
-async def get_cart(id:int):
+async def get_cart_by_id(id:int): # Renombrado para evitar conflicto
     id_client = id
     carrito = await Carrito.find_one({'id_cliente':id_client}, {'_id':0})
     if carrito:
@@ -327,9 +373,38 @@ async def get_cart(id:int):
         }
     
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='El carrito del cliente no existe')
+
+# Endpoint para obtener el carrito del usuario autenticado
+@app.get('/get-cart-client')
+async def get_cart(current_user=Depends(get_current_user)):
+    id_client = current_user['id']
+    carrito = await Carrito.find_one({'id_cliente':id_client}, {'_id':0})
+    if carrito:
+        id_sucursal = carrito['id_sucursal']
+        cliente_details = await Clientes.find_one({'id':id_client}, {'_id':0, 'password':0})
+        sucursal_details = await Sucursales.find_one({'id':id_sucursal}, {'_id':0, 'nombre':1})
+
+        datos = {
+            'id_cliente': id_client,
+            'carrito': carrito,
+            'cliente_details': cliente_details,
+            'sucursal_details': sucursal_details
+        }
+        return {
+            'success': True,
+            'data': datos
+        }
     
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='El carrito del cliente no existe')
+
 @app.post("/pay-online")
 async def pay_online(payment_data: PaymentRequest, current_user=Depends(get_current_user)):
+    """
+    Endpoint para procesar el pago de un pedido en línea.
+    Sigue el diagrama de secuencia "Pagar en linea".
+    Los datos del pedido se consultan de la colección PedidosCliente.
+    Los datos del método de pago se consultan de las colecciones correspondientes.
+    """
     id_cliente_autenticado = current_user["id"]
 
     # 1. (Implícito) Cliente inicia pagarPedido() al llamar a este endpoint.
@@ -342,8 +417,8 @@ async def pay_online(payment_data: PaymentRequest, current_user=Depends(get_curr
     if not pedido:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pedido no encontrado o no pertenece a este usuario.")
 
-    #Se obtiene el ID del estado 'Pagado'
-    estado_pagado_doc = await db["stadoPedidoPagado"].find_one({"estado": "Pagado"})
+    # Se obtieme el ID del estado 'Pagado'
+    estado_pagado_doc = await db["estadoPedidoPagado"].find_one({"estado": "Pagado"})
     if not estado_pagado_doc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Configuración de estado de pago 'Pagado' no encontrada en la base de datos.")
     id_estado_pagado_exitoso = estado_pagado_doc["id"]
@@ -352,8 +427,8 @@ async def pay_online(payment_data: PaymentRequest, current_user=Depends(get_curr
     if pedido.get("id_estado_pagado") == id_estado_pagado_exitoso:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Este pedido ya ha sido pagado.")
 
-    # **Paso crucial 2: Obtener el ID del estado 'En espera'**
-    estado_en_espera_doc = await EstadoPedidoPagado.find_one({"estado": "En espera"})
+    # Se obtiene el ID del estado 'En espera'
+    estado_en_espera_doc = await db["EstadosPedido"].find_one({"estado": "En espera"})
     if not estado_en_espera_doc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Configuración de estado de pedido 'En espera' no encontrada en la base de datos.")
     id_estado_en_espera = estado_en_espera_doc["id"]
@@ -363,7 +438,6 @@ async def pay_online(payment_data: PaymentRequest, current_user=Depends(get_curr
     id_sucursal = pedido.get("id_sucursal")
     if not id_sucursal:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="El pedido no tiene una sucursal asociada.")
-
 
     # 5. Consultar método de pago
     metodo_pago = None
@@ -379,9 +453,9 @@ async def pay_online(payment_data: PaymentRequest, current_user=Depends(get_curr
     if not metodo_pago:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Método de pago no encontrado o no pertenece a este usuario.")
 
-    # 6. Validar consulta (simulación de pasarela de pago)
+    # 6. Validar consulta
     print(f"DEBUG: Procesando pago de {pedido.get('monto_total', 0)} con método {payment_data.payment_method_type} ID: {payment_data.payment_method_id}")
-    pago_exitoso = True # Esto se determinaría por la pasarela de pago real
+    pago_exitoso = True
 
     if not pago_exitoso:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El procesamiento del pago falló.")
@@ -412,24 +486,28 @@ async def pay_online(payment_data: PaymentRequest, current_user=Depends(get_curr
         "order_main_status_id": id_estado_en_espera,
         "order_main_status_name": estado_en_espera_doc["estado"]
     }
-    
+
 @app.post("/pay-at-branch")
 async def pay_at_branch(
     payment_data: PayAtBranchRequest,
     current_user=Depends(get_current_user)
 ):
-
+    """
+    Endpoint para procesar el pago de un pedido en sucursal por parte de un cajero.
+    Sigue el diagrama de secuencia "Pagar en sucursal".
+    """
     # 1. Verificar que el usuario autenticado sea un Cajero
-    if current_user.get("rol_nombre") != "cajero":
+    user_rol_name = current_user.get("rol_nombre")
+    if user_rol_name not in ["cajero"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Acceso denegado. Solo los cajeros pueden procesar pagos en sucursal."
+            detail="Acceso denegado. Solo personal autorizado (cajeros, gerentes, admins) puede procesar pagos en sucursal."
         )
 
     id_cliente_solicitado = payment_data.client_id
     order_id = payment_data.order_id
 
-    # 2. y 3. Sistema: new() y id_cliente = getID()
+    # 2. y 3. Sistema: new() y id_cliente = getID() (Implícito en la solicitud)
     # Se crea una instancia conceptual de Cliente, y su ID se obtiene de la solicitud.
 
     # 4. Sistema: nombre_cliente = getNombreCompleto()
@@ -472,13 +550,12 @@ async def pay_at_branch(
         print(f"Advertencia: Teléfono no encontrado para el cliente {id_cliente_solicitado}")
 
     # 9. BDPedidos: confirmacion = validarMetodo()
-    pago_validado_por_cajero = True
+    pago_validado_por_cajero = True # El cajero confirma la recepción del pago.
 
     if not pago_validado_por_cajero:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El cajero no pudo validar el pago.")
 
     # 10. BDPedidos: confirmacion = setEstadoPedidoPagado("Pagado")
-    # Actualizar el estado de pago del pedido y el estado principal del pedido a "En espera"
     update_fields = {
         "id_estado_pagado": id_estado_pagado_exitoso,  # Marcar como pagado
         "id_estado": id_estado_en_espera,              # Cambiar el estado del pedido a "En espera"
@@ -506,12 +583,46 @@ async def pay_at_branch(
         "cajero_nombre": f"{current_user.get('nombre')} {current_user.get('apellido')}"
     }
 
-    # 12. Cajero: entregarTicket()
+    # 12. Cajero: entregarTicket() (Implícito al devolver la respuesta)
     return {
         "success": True,
         "message": "Pago en sucursal procesado exitosamente.",
         "ticket": ticket_info
     }
+
+@app.get('/get-employees')
+async def get_employees(current_user=Depends(get_current_user)):
+    """
+    Endpoint para obtener la lista de todos los empleados.
+    Requiere que el usuario autenticado sea un 'gerente' o 'admin'.
+    Excluye información sensible como la contraseña.
+    """
+    user_rol_name = current_user.get("rol_nombre")
+
+    # Verifica si el usuario actual tiene el rol de 'gerente' o 'admin'
+    if user_rol_name not in ["gerente", "admin"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acceso denegado. Solo gerentes o administradores pueden ver la lista de empleados."
+        )
+
+    # Consulta la colección 'Empleados'
+    cursor = Empleados.find({}, {"_id": 0, "password": 0})
+    
+    # Convierte el cursor de MongoDB a una lista de diccionarios
+    employees_list = [doc async for doc in cursor]
+
+    if employees_list:
+        return {
+            "success": True,
+            "data": employees_list
+        }
+    else:
+        # Si no se encuentran empleados, devuelve un error 404
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='No se encontraron empleados en el sistema.'
+        )
 
 
 
@@ -592,6 +703,7 @@ async def gestionHorarios(datos: HorarioRequest):
         await db["LogSistemaEmpleado"].insert_one(log_entry)
         return HorarioResponse(mensaje="Horarios gestionados correctamente")
     except Exception as e:
+
         raise HTTPException(status_code=500, detail=f"Error al registrar el log: {str(e)}")
 
 
@@ -705,3 +817,4 @@ async def removeItem(id: int):
         return {"success": True, "message": "Producto eliminado del carrito"}
     else:
         raise HTTPException(status_code=404, detail="Producto no encontrado en el carrito")
+
