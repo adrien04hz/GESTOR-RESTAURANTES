@@ -1,23 +1,25 @@
 from Models.Usuario import Usuario
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import List, Optional
 
 class LoginRequest(BaseModel):
     email: EmailStr
-    contrasena: str
+    password: str
     
 class LoginResponse(BaseModel):
     nombre: str
     apellido: str
 
 class ClienteCreate(BaseModel):
-    id: int
     nombre: str
     apellido: str
     email: EmailStr
-    contrasena: str
-    metodosPago: Optional[List[str]] = []
-    id_carrito: Optional[str] = None
+    password: str = Field(min_length=6)
+    telefono: str = Field(pattern=r'^\d{10}$')
+    direccion: str
+
+    class Config:
+        extra = "forbid"
 
 class ClienteResponse(BaseModel):
     id: str
