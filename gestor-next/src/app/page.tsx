@@ -79,14 +79,14 @@ export default function LoginPage() {
   
       // Usar window.location.href para la navegación
       if (userData.id_rol === 1) {
-        router.push('/Home/pagina-gerente');
+        window.location.href = '/Home/pagina-gerente';
       } else if (userData.id_rol === 3) {
-        router.push('/Home/pagina-rrhh');
-      }else if(userData.id_rol === 5){
-        router.push('/Home/pagoSucursal');
+        window.location.href = '/Home/pagina-rrhh';
+      } else if (userData.id_rol === 5) {
+        window.location.href = '/Home/pagoSucursal';
 
       } else {
-        router.push('/Home/Catalogo/' + 1);
+        window.location.href = '/Home/Catalogo/' + 1;
       }
   
     } catch (error) {

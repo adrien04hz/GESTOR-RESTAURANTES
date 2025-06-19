@@ -38,22 +38,40 @@ export default function DetalleProductoCarrito() {
   const [estadoPago, setEstadoPago] = useState(estados[0].estado); // "Pendiente"
   const [procesando, setProcesando] = useState(false);
   const [productos, setProductos] = useState<Productos[]>([]);
+  const [pedidoHecho, setPedidoHecho] = useState(false);
+  const [ultimo_id, setUltimoId] = useState<number | null>(null);
 
   // Simulación de pago en línea
   const handlePagar = async () => {
-    setProcesando(true);
-    setEstadoPago("Procesando pago...");
-    //  llamada a servicio de pago
-    setTimeout(() => {
-      // Simula éxito o error
-      const exito = Math.random() > 0.2;
-      if (exito) {
-        setEstadoPago(estados[1].estado); 
-      } else {
-        setEstadoPago(estados[2].estado); // "Error de pago"
+    const token = localStorage.getItem('token');
+
+    if(token){
+      setProcesando(true);
+      try {
+        const response = await fetch("http://127.0.0.1:8000/pay-online", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            order_id: ultimo_id,
+            payment_method_id: 3,
+            payment_method_type: "credit_card",
+          }),
+        });
+        const data = await response.json();
+        if (data.success) {
+          setEstadoPago("Pagado");
+        } else {
+          setEstadoPago("Error de pago");
+        }
+      } catch (error) {
+        setEstadoPago("Error de pago");
+      } finally {
+        setProcesando(false);
       }
-      setProcesando(false);
-    }, 2000);
+    }
   };
 
 
@@ -63,13 +81,18 @@ export default function DetalleProductoCarrito() {
       const resp  = await fetch(`http://127.0.0.1:8000/cart/${idParam}`).then(res => res.json());
       const { data }: CarritoDetalles = resp;
       setProductos(data);
+
+      const ultimo_id = await fetch("http://127.0.0.1:8000/ultimo-id-pedido").then(res => res.json()).then(data => data.id);
+      setUltimoId(ultimo_id);
+
     }
 
     carrito()
-  }, [])
+  }, []);
 
 
   const realizarPedido = async () => {
+    setPedidoHecho(true);
     try {
       const response = await fetch("http://127.0.0.1:8000/pedidosEnLinea", {
         method: "POST",
@@ -85,6 +108,10 @@ export default function DetalleProductoCarrito() {
       // Puedes manejar la respuesta aquí, por ejemplo redirigir o mostrar un mensaje
       if (data.success) {
         setEstadoPago("Pagado");
+
+
+
+        
         // router.push("/Home/Carrito"); // Si quieres redirigir
       } else {
         setEstadoPago("Error de pago");
@@ -93,6 +120,18 @@ export default function DetalleProductoCarrito() {
       setEstadoPago("Error de pago");
     }
   }
+
+  useEffect(() => {
+    if(pedidoHecho){
+        
+      const limpiar = async () => { fetch(`http://127.0.0.1:8000/clear-cart/${idParam}`, {
+        method: "DELETE",
+      });
+      
+      limpiar();
+      location.reload();}   
+    }
+  },[pedidoHecho])
 
   return (
     <div className='flex items-center justify-center min-h-screen bg-gradient-to-br from-[#F9F5F3] via-[#F9F5F3] to-[#F9F5F3] px-2'>
@@ -108,16 +147,26 @@ export default function DetalleProductoCarrito() {
           {/* <div className="mb-4">
             <p className="text-[15px] font-semibold">Estado del pago: <span className="text-blue-600">{estadoPago}</span></p>
           </div> */}
-          <button
+            {pedidoHecho && (          <button
+            onClick={handlePagar}
+            
+            className={`block w-full px-4 py-3 font-medium tracking-wide text-center capitalize transition-colors duration-300 transform rounded-[14px] focus:outline-none focus:ring focus:ring-teal-300 focus:ring-opacity-80
+              ${estadoPago === "Pagado" ? "bg-green-400 cursor-not-allowed" : "bg-[#FFC933] hover:bg-[#FFC933DD]"}`}
+          >
+            Pagar en linea
+          </button>)}
+
+
+{!pedidoHecho && (          <button
             onClick={realizarPedido}
-            disabled={procesando || estadoPago === "Pagado"}
+            
             className={`block w-full px-4 py-3 font-medium tracking-wide text-center capitalize transition-colors duration-300 transform rounded-[14px] focus:outline-none focus:ring focus:ring-teal-300 focus:ring-opacity-80
               ${estadoPago === "Pagado" ? "bg-green-400 cursor-not-allowed" : "bg-[#FFC933] hover:bg-[#FFC933DD]"}`}
           >
             Realizar Pedido
-          </button>
+          </button>)}
           <Link
-            href="/Home/Carrito"
+            href={`/Home/Catalogo/${idParam}`}
             className='block mt-2 w-full px-4 py-3 font-medium tracking-wide text-center capitalize transition-colors duration-300 transform rounded-[14px] hover:bg-[#F2ECE7] hover:text-[#000000dd] focus:outline-none focus:ring focus:ring-teal-300 focus:ring-opacity-80'
           >
             Volver al menú
