@@ -134,6 +134,13 @@ interface EstadosPedido{
     estado: string;
 }
 
+// nueva coleccion
+interface EstadosPedidoPagado{
+    id: number;
+    estado_pagado: string;
+}
+
+
 
 // nueva coleccion
 interface EstadosPedidoPagado{

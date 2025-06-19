@@ -2,6 +2,12 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   /* config options here */
-};
-
-export default nextConfig;
+   images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'mg.freepik.com',
+      }]
+}
+}
+module.exports = nextConfig;
