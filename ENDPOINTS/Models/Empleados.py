@@ -1,4 +1,23 @@
 from Models.Usuario import Usuario
+from pydantic import BaseModel, EmailStr
+from typing import List, Optional
+
+
+
+# gestion de horarios request (caso de uso 3)
+class HorarioRequest(BaseModel):
+    id_empleado: int
+    id_sucursal: int
+    hora_entrada: str  # Formato HH:MM
+    hora_salida: str  # Formato HH:MM
+
+
+# proceso de pago en sucursal request (caso de uso 4)
+class PagoSucursalRequest(BaseModel):
+    id_pedido: int
+    id_cliente: int
+    id_sucursal: int
+    tipo_metodo : str  # 'tarjeta_credito', 'tarjeta_debito', 'paypal'
 
 
 class Empleado(Usuario):

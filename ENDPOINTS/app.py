@@ -11,6 +11,7 @@ from Models.Cliente import Cliente as DomainCliente
 from Models.Token import TokenResponse
 from Models.MetodosPago import CreditCardRequest, DebitCardRequest, PaypalRequest
 from Models.PedidosProductos import Cart
+from Models.Cliente import *
 
 
 from utils.auth import (
@@ -56,6 +57,7 @@ DetallesCarrito = db["DetallesCarrito"]
 Empleados = db["Empleados"]
 EmpleadosAdmin = db["EmpleadosAdmin"]
 EstadosPedido = db["EstadosPedido"]
+EstadosPedidoPagado = db["EstadosPedidoPagado"]
 HorariosAdmin = db["HorariosAdmin"]
 HorariosEmpleados = db["HorariosEmpleados"]
 LogSistemaAdmin = db["LogSistemaAdmin"]
@@ -63,7 +65,7 @@ LogSistemaEmpleados = db["LogSistemaEmpleados"]
 PayPalCliente = db["PayPalCliente"]
 PedidosCliente = db["PedidosCliente"]
 Productos = db["Productos"]
-ProductosPedido = db["ProductosPedido"]
+ProductosPedidos = db["ProductosPedidos"]
 Roles = db["Roles"]
 RolesAdmin = db["RolesAdmin"]
 Sucursales = db["Sucursales"]
@@ -147,7 +149,7 @@ async def create_client(cliente: ClienteCreate):
 @app.post("/login", response_model=TokenResponse, status_code=200)
 async def login(datos: LoginRequest):
     user = await Clientes.find_one({"email": datos.email})
-    if not user or not verify_password(datos.contrasena, user["contrasena"]):
+    if not user or not verify_password(datos.contrasena, user["password"]):
         raise HTTPException(status_code=401, detail="Credenciales incorrectas")
 
     token = create_access_token({"sub": user["email"]})
@@ -254,4 +256,26 @@ async def get_cart(id:int):
         }
     
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='El carrito del cliente no existe')
+
+
+
+# endpoints para caso de uso 1
+# pedidos en linea
+@app.post('/pedidosEnLinea', response_model=PedidoResponse, status_code=200)
+async def pedidosEnLinea( datos : PedidoRequest):
     
+    # Crear cliente
+    cliente = await Cliente.crear_cliente(db, datos.id_cliente)  
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    
+    # 1 : realizar pedido
+    confirmacion = await cliente.realizarPedidoEnLinea(db, datos.id_sucursal)
+
+
+    if confirmacion:
+        return PedidoResponse(mensaje="Pedido realizado con éxito")
+    else:
+        raise HTTPException(status_code=500, detail="Error al realizar el pedido")
+
+

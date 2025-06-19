@@ -1,4 +1,15 @@
 from Models.Usuario import Usuario
+from pydantic import BaseModel, EmailStr
+from typing import List, Optional
+
+# alta personal request (caso de uso 2)
+class EmpleadoRequest(BaseModel):
+    id_rol : int
+    id_sucursal: int
+    nombre: str
+    apellido: str
+    email: EmailStr
+    contrasena: str
 
 class EmpleadoAdmin(Usuario):
     def __init__(self, nombre, apellido, id_empleado, rol, id_depto):
