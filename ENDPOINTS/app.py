@@ -641,3 +641,67 @@ async def get_sucursales():
             "success": False,
             "message": "No se encontraron sucursales"
         }
+    
+
+# basemodel para carrito
+class Producto(BaseModel):
+    id_carrito : int
+    id_producto : int
+    id_sucursal : int
+
+
+
+# endpoint para anadir al carrito
+@app.post("/addToCart")
+async def add_to_cart(producto : Producto):
+    # Buscar el carrito del cliente para la sucursal
+    carrito = await DetallesCarrito.find_one({
+        "id_carrito": producto.id_carrito,
+        "id_producto": producto.id_producto,
+        "id_sucursal": producto.id_sucursal
+    })
+
+    # Si ya existe, no lo agrega de nuevo
+    if carrito:
+        return {"success": False, "message": "El producto ya está en el carrito para esta sucursal"}
+
+    # Si no existe, lo agrega
+    nuevo_detalle = {
+        "id_carrito" : producto.id_carrito,
+        "id_producto": producto.id_producto,
+        "id_sucursal": producto.id_sucursal
+    }
+    await DetallesCarrito.insert_one(nuevo_detalle)
+
+    return {"success": True, "message": "Producto añadido al carrito"}
+
+
+
+# endpoint que retorna los productos de un carrito relacionado con Productos
+@app.get("/cart/{id_carrito}")
+async def get_cart(id_carrito: int):
+    # Buscar los detalles del carrito
+    detalles = await DetallesCarrito.find({"id_carrito": id_carrito}).to_list(length=None)
+
+    if not detalles:
+        return {"success": False, "message": "No se encontraron productos en el carrito"}
+
+    # Obtener los productos relacionados
+    productos = []
+    for detalle in detalles:
+        producto = await Productos.find_one({"id": detalle["id_producto"]}, {"_id": 0})
+        if producto:
+            producto["cantidad"] = detalle.get("cantidad", 1)
+            productos.append(producto)
+
+    return {"success": True, "data": productos}
+
+
+# endpoint para eliminar del carrito 
+@app.delete("/removeItem/{id}")
+async def removeItem(id: int):
+    result = await DetallesCarrito.delete_one({"id_producto": id})
+    if result.deleted_count == 1:
+        return {"success": True, "message": "Producto eliminado del carrito"}
+    else:
+        raise HTTPException(status_code=404, detail="Producto no encontrado en el carrito")
