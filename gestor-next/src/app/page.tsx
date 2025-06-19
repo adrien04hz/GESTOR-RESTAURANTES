@@ -1,7 +1,8 @@
+// login_page.tsx (Este es el archivo de login original que el usuario ha proporcionado)
 "use client";
+import router from 'next/router';
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+// Eliminado: import { useRouter } from 'next/navigation'; // Ya no se usa useRouter
 
 interface UserData {
   id: number;
@@ -15,9 +16,9 @@ interface UserData {
 }
 
 export default function LoginPage() {
-  const router = useRouter();
+  // Eliminado: const router = useRouter(); // useRouter ya no es necesario
   const [formData, setFormData] = useState({
-    email: '', // Cambiado de username a email para coincidir con tu interfaz
+    email: '',
     password: ''
   });
 
@@ -74,8 +75,9 @@ export default function LoginPage() {
       const userData: UserData = data.user;
   
       localStorage.setItem('token', token);
-      sessionStorage.setItem('userData', JSON.stringify(userData));
+      sessionStorage.setItem('userData', JSON.stringify(userData)); // Guardar userData en sessionStorage
   
+      // Usar window.location.href para la navegación
       if (userData.id_rol === 1) {
         router.push('/Home/pagina-gerente');
       } else if (userData.id_rol === 3) {
@@ -183,12 +185,13 @@ export default function LoginPage() {
                   </button>
 
                   <div className="flex justify-center mt-5">
-                    <Link 
-                      href="/Home/registro-cliente" 
+                    {/* Se reemplaza Link por <a> y se usa window.location.href para la navegación */}
+                    <a
+                      href="/Home/registro-cliente"
                       className="text-center font-medium text-gray-500 hover:text-green-600 transition-colors"
                     >
                       ¿No tienes cuenta? Regístrate
-                    </Link>
+                    </a>
                   </div>
                 </div>
               </form>

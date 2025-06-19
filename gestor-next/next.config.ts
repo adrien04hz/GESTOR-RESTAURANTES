@@ -16,6 +16,10 @@ const nextConfig: NextConfig = {
       {
         protocol: "https",
         hostname: "d2luv1saso99wi.cloudfront.net"
+      },
+      {
+        protocol : "https",
+        hostname : "images.ctfassets.net"
       }
     ]
   }
